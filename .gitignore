@@ -1,0 +1,4 @@
+# Local reference repositories
+/references/*/
+!/references/README.md
+
