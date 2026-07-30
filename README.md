@@ -1,191 +1,159 @@
 # Silieco
 
-> 让人类、Agent、知识、应用与工作流，在统一任务、统一上下文和统一治理下协作。
+Silieco 是一个面向团队的 Agent Work OS：把事项、Agent、本地执行、
+审批、产物和人工验收放进同一个可追踪工作流。
 
-Silieco 是一套面向个人、团队与企业的 **Agent Work OS / Organization OS**。
+当前仓库已经包含一个可运行的 MVP，而不再只是概念骨架：
 
-它不以 Chat 为中心，也不试图重新实现所有 Agent Runtime。Silieco 以 **Task Graph** 作为工作事实源，把桌面、Web、终端、浏览器与 IM 中的工作连接起来，让人和 Agent 可以围绕同一项任务持续协作、执行、审批、验收和沉淀知识。
+- Web / Desktop 共用的 Workspace 工作台；
+- 最基本的注册、登录和 Cookie Session；
+- Item、Run、Event、Approval、Artifact 领域模型；
+- SQLite 持久化与 SSE 实时动态；
+- Electron Desktop 与本地 Runtime；
+- Codex app-server、Claude Code stream-json 适配器；
+- Run 认领、租约心跳、协议终态校验与人工验收。
 
-> 当前状态：项目初始化阶段。领域模型、技术边界和首个纵向闭环正在设计中，尚无可发布版本。
+> 当前为开发预览版，不建议用于生产数据。仓库尚未声明开放源代码许可证，
+> 默认保留所有权利。
 
-## 为什么做 Silieco
+## 核心完成契约
 
-现有 Agent 产品大多擅长完成一次对话或一次执行，但真实工作还需要：
-
-- 明确目标、责任人、依赖关系和完成标准；
-- 在多个 Agent、人、工具和入口之间连续流转；
-- 在高风险动作前获得正确授权；
-- 在执行后留下进度、成本、证据、产物和审计记录；
-- 把新产生的经验变成下一项工作的可用上下文。
-
-Silieco 要建立的最小工作闭环是：
+Silieco 不把“CLI 进程退出”当作事项完成：
 
 ```text
-Intent → Task → Context → Actor + Capability → Action
-   ↑                                             ↓
-Knowledge ← Decision ← Artifact + Evidence ←────┘
+Runtime 在线并持有 Run 租约
+        ↓
+Provider 发出可信终态
+        ↓
+Run reported / Item in_review
+        ↓
+负责人核对产物与验收条件
+        ↓
+Run completed / Item done
 ```
 
-## 产品组成
+- Codex：使用 `codex app-server --stdio`，执行
+  `initialize → thread/start → turn/start`，只认当前 Thread / Turn 的
+  `turn/completed`。
+- Claude Code：使用 `--output-format stream-json`，要求终态
+  `type=result`、`subtype=success`、`is_error=false`。
+- Provider 成功只会提交执行报告；负责人验收后，业务事项才正式完成。
+- Run 租约过期不会自动重跑，避免重复提交、重复发信等副作用。
 
-| 产品 | 核心职责 |
+详细设计见
+[Agent Runtime 生命周期](docs/architecture/AGENT-LIFECYCLE.md)。
+
+## 技术栈
+
+| 模块 | 实现 |
 | --- | --- |
-| **Silico Node** | Local-first 运行节点，承载 daemon、CLI、Runtime Adapter、本地存储、密钥和设备能力 |
-| **Silico Workspace** | 桌面与 Web 共用的工作台，统一呈现 Task、Conversation、Artifact、Approval 和 Activity |
-| **Silico Control Plane** | 团队与企业控制面，管理组织身份、Agent 编制、任务调度、策略、审计和多节点协作 |
+| Workspace | React 19、Radix Themes、Vite |
+| Desktop | Electron |
+| Local Runtime | Node.js、Codex app-server、Claude Code CLI |
+| Service | Node.js HTTP、SSE |
+| Storage | Node.js 内置 SQLite |
+| Auth | scrypt 密码哈希、HttpOnly Cookie Session |
 
-系统由四个稳定内核支撑：
+MVP 使用 Node.js 纵向打通产品闭环。未来若需要更强的进程隔离和系统级能力，
+可把 Runtime Supervisor 迁移到 Rust，但领域契约保持不变。
 
-- **Work Kernel**：Intent、Task、Run、依赖、Artifact 与 Evidence；
-- **Context Kernel**：项目上下文、组织知识、记忆与上下文路由；
-- **Coordination Kernel**：角色、分派、委派、交接、会话与调度；
-- **Governance Kernel**：身份、权限、审批、预算、风险与审计。
+## 本地启动
 
-## 核心原则
+要求：
 
-- **Task-first**：Chat、IM、CLI 和浏览器是入口，Task 才是共同语言。
-- **Task 与 Run 分离**：工作目标不依赖某一次 Agent 执行。
-- **Local-first**：代码、Cookie、密钥和敏感执行结果可以只留在本地。
-- **Agent 是 Principal**：Agent 拥有身份、岗位、责任人和可审计的行为。
-- **Capability 不等于 Permission**：会做某件事，不代表已经获准执行。
-- **完成必须有证据**：验收依靠条件、Artifact 和 Evidence，而非执行者自我声明。
-- **一个事实源，多种投影**：桌面、Web、CLI、IM 和 MCP 操作同一份任务状态。
-- **开放执行生态**：复用成熟模型、Coding Agent、MCP、Skill、CLI、浏览器和通讯平台。
+- Node.js `>= 22.13.0`
+- npm `>= 10`
+- 可选：已登录的 `codex` 和/或 `claude` CLI
 
-## 第一阶段目标
+安装并启动 Web + API：
 
-首个里程碑不是完整 UI，而是跑通一个可靠的本地工作闭环：
-
-1. 通过 CLI 创建一个 Task；
-2. Task 被持久化并分派给一个 Runtime Adapter；
-3. Agent 执行期间持续产生结构化 Event；
-4. 高风险动作进入 Approval，而不是直接执行；
-5. 完成后提交 Artifact 与 Evidence；
-6. daemon 重启后可以恢复任务，不重复执行；
-7. CLI、MCP 或未来的 Workspace 读取到一致状态。
-
-退出标准：
-
-> 同一个 Task 可以被创建、持久化、执行、观察、审批和验收；进程重启后仍可恢复，并保留完整事件链。
-
-## 首批纵向场景
-
-### 研发 Feature
-
-```text
-需求进入
-  → 拆分 Task 与依赖
-  → Coding Agent 在隔离 worktree 中执行
-  → 测试与浏览器证据
-  → 人工审查
-  → 合并、归档并写回知识
+```bash
+npm install
+npm run dev
 ```
 
-该场景用于同时验证 Task Graph、Runtime Adapter、Artifact、Evidence、Approval 和知识写回，而不是分别建设一组无法闭环的基础设施。
+访问 <http://localhost:5173>。
 
-后续场景：
+演示账号：
 
-- 浏览器运营任务：IM 发起、隔离浏览器执行、提交前审批、结果回到原 Task；
-- 企业 Agent 入职：岗位定义、能力审批、节点部署、试运行评估与持续审计。
+```text
+demo@silieco.local
+silieco
+```
 
-## 技术方向
+要连接本地 Agent Runtime，再打开一个终端启动 Desktop：
 
-当前建议技术基线：
+```bash
+npm run dev:desktop
+```
 
-- **Rust**：Node、daemon、CLI、领域内核、协议网关与本地安全边界；
-- **SQLite**：个人与本地优先阶段的持久化；
-- **React + TypeScript + Tauri**：Desktop / Web 共用 Workspace；
-- **Axum + PostgreSQL**：团队阶段的 Control Plane；
-- **OpenAPI / JSON Schema**：跨语言契约与 SDK 生成；
-- **MCP / A2A / Webhook**：外部能力与 Agent 接入协议，不作为内部领域模型。
+在工作台右侧选择 Agent 工作目录并连接。本地 Runtime 会自动发现 Codex 和
+Claude Code。
 
-技术选择可以演进，但不能反向改变 Task、Run、Event、Approval 等核心对象的产品语义。
+## 常用命令
 
-## 计划中的仓库结构
+```bash
+npm run dev          # API + Web 开发服务
+npm run dev:desktop  # Electron Desktop
+npm test             # 领域与 Provider 生命周期测试
+npm run check        # 全部模块语法检查和前端构建
+npm run build        # 构建 Web
+npm start            # 从 API 服务生产构建后的 Web
+```
 
-下面是目标结构，不代表这些模块已经实现：
+开发数据默认写入 `.data/silieco.db`，已被 Git 忽略。需要重新体验种子数据时，
+停止服务后删除这个数据库即可。
+
+## 仓库结构
 
 ```text
 silieco/
-├── Cargo.toml
-├── crates/
-│   ├── silieco-domain/       # 核心领域模型与状态机
-│   ├── silieco-store/        # SQLite / PostgreSQL 持久化
-│   ├── silieco-runtime/      # Runtime Adapter 与进程监管
-│   ├── silieco-policy/       # 权限、审批与策略执行
-│   ├── silieco-protocol/     # API、Event 与协议类型
-│   └── silieco-sdk/
 ├── apps/
-│   ├── silieco-cli/
-│   ├── siliecod/
-│   ├── desktop/
-│   ├── web/
-│   └── control-plane/
-├── adapters/
-│   ├── codex/
-│   ├── claude-code/
-│   └── anyclaw/
-├── packs/
-│   └── fdd/
-├── schemas/
-│   ├── task.schema.json
-│   ├── event.schema.json
-│   └── agent-manifest.schema.json
+│   ├── api/          # 认证、领域服务、SQLite、SSE、Runtime API
+│   ├── desktop/      # Electron 壳与 Runtime IPC
+│   ├── runtime/      # Codex / Claude Code 本地执行适配器
+│   └── web/          # Web/Desktop 共用 Workspace UI
 ├── docs/
-│   ├── architecture/
-│   ├── adr/
-│   └── threat-models/
-└── tests/
-    ├── contracts/
-    └── e2e/
+│   ├── adr/          # 独立实现与架构决策
+│   └── architecture/ # 领域模型、生命周期契约
+├── references/       # 本地参考项目；源码目录不会进入 Git
+└── scripts/          # 开发编排脚本
 ```
 
-## 开坑清单
+## MVP 工作流
 
-### Phase 0：领域与协议骨架
+1. 注册或登录 Workspace；
+2. 创建 Item，选择 Specialized Agent 与验收条件；
+3. 创建 Run，负责人批准本次本地执行范围；
+4. Desktop Runtime 原子认领 Run，并持续刷新租约；
+5. Codex 或 Claude Code 在用户选择的目录执行；
+6. Runtime 上报结构化进度、Session、终态协议证据和 Artifact；
+7. Item 进入 `in_review`；
+8. 负责人验收后进入 `done`。
 
-- [ ] 编写 `ADR-001`，冻结产品边界和三层产品结构；
-- [ ] 定义 Task、Run、Attempt、Event、Artifact、Evidence、Approval schema；
-- [ ] 定义 Task / Run 状态机及 transition contract tests；
-- [ ] 定义 Runtime Adapter、Connector 与 Workflow Pack 契约；
-- [ ] 建立 Rust workspace、CLI 和 daemon 最小骨架；
-- [ ] 用 SQLite 跑通创建、持久化、执行、重启恢复与事件输出。
+## 独立实现边界
 
-### Phase 1：Personal Local-first MVP
+Silieco 根据自身产品文档和公开可观察行为独立设计。`references/` 仅用于研究
+产品边界、协议行为和兼容性，不复制、翻译或改名第三方受限源码。相关决策见
+[ADR-001](docs/adr/ADR-001-independent-implementation.md)。
 
-- [ ] 接入第一个 Coding Agent Runtime Adapter；
-- [ ] 提供 `task create/list/get/watch` CLI；
-- [ ] 提供最小 MCP Server；
-- [ ] 实现 Approval、Artifact、Evidence、Activity 与 kill switch；
-- [ ] 实现 FDD Workflow Pack；
-- [ ] 跑通“研发 Feature”端到端场景。
+## 已知 MVP 限制
 
-### Phase 2：Workspace 与团队协作
+- 当前只有一个种子 Workspace / Project；
+- 注册用户暂时加入同一个演示 Workspace；
+- Codex 已使用 app-server，但跨 Run thread resume 尚未接入；
+- Claude Code 已保存 Session ID，但跨 Run resume 尚未接入；
+- 还没有邮件验证、密码找回、RBAC 和多租户隔离；
+- Artifact 当前存入 SQLite，尚未接对象存储或 Git 引用；
+- 自动验收 Gate 尚未实现，最终完成由负责人确认。
 
-- [ ] 建立 Desktop / Web 共用工作台；
-- [ ] 支持 Workspace、Project、Member 与 Agent 协作；
-- [ ] 建立多节点 dispatch、lease、heartbeat 和 offline outbox；
-- [ ] 接入首个 IM Connector；
-- [ ] 建立基础 RBAC、Agent owner、Project scope、预算与审计。
+## 产品资料
 
-## 开发约定
-
-项目刚刚初始化，工程规范会通过 ADR 和实际纵向场景逐步固定。在此之前：
-
-1. 任何核心模型变更先写清用户价值、边界和迁移影响；
-2. 不为不同入口复制 Task 状态机；
-3. 新能力必须区分“可以调用”与“允许调用”；
-4. Pull Request 应包含验收条件、测试结果和必要证据；
-5. 优先完成可运行的纵向切片，避免长期建设孤立基础设施。
-
-## 相关项目
-
-- [Silieco 产品官网与概念设计](https://github.com/auenger/SilicoEco)
+- [协作平台功能清单](协作平台功能清单.md)
+- [MVP 领域模型](docs/architecture/MVP-DOMAIN.md)
+- [Agent Runtime 生命周期](docs/architecture/AGENT-LIFECYCLE.md)
+- [Silieco 产品官网](https://github.com/auenger/SilicoEco)
 
 ## License
 
-许可证尚未确定。在正式添加开源许可证前，本仓库默认保留所有权利。
-
----
-
-**Silieco = Work + Context + Coordination + Governance**
+许可证尚未确定。在正式添加许可证前，本仓库默认保留所有权利。

@@ -1,0 +1,17 @@
+{
+  "name": "@silieco/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/main.mjs",
+  "scripts": {
+    "dev": "electron .",
+    "start": "electron .",
+    "check": "node --check src/main.mjs && node --check src/preload.mjs"
+  },
+  "dependencies": {
+    "@silieco/runtime": "*",
+    "electron": "^39.2.6"
+  }
+}
+
