@@ -2,10 +2,33 @@
 /references/*/
 !/references/README.md
 
-# Dependencies and builds
+# JavaScript dependencies and build output
 node_modules/
+.turbo/
 dist/
+out/
+.next/
+.source/
+.expo/
+*.tsbuildinfo
 apps/*/dist/
+apps/*/dist-electron/
+apps/*/out/
+apps/*/.next/
+apps/*/.source/
+apps/*/.expo/
+apps/*/.turbo/
+packages/*/dist/
+packages/*/.turbo/
+
+# Go build output
+/core/bin/
+/core/tmp/
+coverage.out
+
+# Desktop bundled CLI and packaging output
+/apps/desktop/resources/bin/
+/apps/desktop/release/
 
 # Local runtime data
 .data/
@@ -19,4 +42,3 @@ apps/*/dist/
 !.env.example
 *.log
 .DS_Store
-

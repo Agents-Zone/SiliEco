@@ -1,0 +1,21 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "base-nova",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "styles/tokens.css",
+    "baseColor": "zinc",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "iconLibrary": "lucide",
+  "aliases": {
+    "components": "@silieco/ui/components",
+    "ui": "@silieco/ui/components/ui",
+    "hooks": "@silieco/ui/hooks",
+    "lib": "@silieco/ui/lib",
+    "utils": "@silieco/ui/lib/utils"
+  }
+}

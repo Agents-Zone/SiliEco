@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX CONCURRENTLY idx_chat_session_participant_unique ON chat_session_participant(chat_session_id, participant_type, participant_id);

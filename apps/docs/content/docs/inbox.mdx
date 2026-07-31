@@ -1,0 +1,73 @@
+---
+title: Inbox and subscriptions
+description: One place for assignments, mentions, comments, and agent failures that need your follow-up.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+The inbox collects the work activity that concerns you. It's not a full activity log — it flags where something changed that needs your attention; the full context stays on the corresponding task.
+
+## What lands in the inbox
+
+Common notifications include:
+
+- a task is assigned to you, or moved away from you;
+- a task you subscribe to gets a new comment, or its assignee, status, priority, or dates change;
+- someone @-mentions you in a task description or comment;
+- a task or comment you created gets a reaction;
+- an agent run fails on a task you subscribe to;
+- creating a task through an agent completes or fails;
+- an autopilot you subscribe to creates a new task, or is paused after consecutive failures.
+
+Your own actions don't notify you. Multiple notifications on the same task merge into one entry; open it to see the task's recent changes.
+
+## Sources of automatic subscription
+
+These participants subscribe to a task automatically:
+
+- the task's creator;
+- a new assignee;
+- anyone who comments;
+- anyone newly @-mentioned in the task description;
+- subscribers preconfigured in an autopilot.
+
+Changing the assignee does not remove existing subscriptions. Subscribe or unsubscribe anytime on the task page; after unsubscribing, ordinary updates stop reaching your inbox, while direct @-mentions still notify you individually.
+
+<Callout type="info">
+When a sub-task's status changes, subscribers of the parent task are notified as well. Sub-task comments, priority, and date changes do not bubble up to the parent.
+</Callout>
+
+## Agents don't use the inbox
+
+The inbox is only for workspace members. Even when an agent is the assignee or a subscriber, it never reads inbox notifications.
+
+@-mentioning an agent in a comment, assigning a task to it, or triggering an autopilot creates a run directly instead of leaving the agent a notification. `@all` notifies members only.
+
+## Handle notifications
+
+Selecting a notification marks it as read. Archive it when you're done; archiving doesn't modify or delete the corresponding task. Once a task reaches `in_review`, `done`, or `cancelled`, its run-failure notifications archive automatically.
+
+From the inbox menu you can also:
+
+- mark all as read;
+- archive all, or archive all read;
+- archive notifications for tasks in `done` or `cancelled`;
+- open Archived and restore a notification.
+
+## Tune notification types
+
+Open **Settings → Notifications** to toggle each group separately:
+
+- assignments;
+- status changes;
+- comments and mentions;
+- priority and dates;
+- agent activity.
+
+Turning a group off doesn't stop the changes from being recorded on the task — it only stops the inbox notifications. A few types, such as reactions, quick-create results, and autopilot pauses, sit outside these five groups and are always delivered. System and browser notifications control desktop banners and don't change the inbox itself.
+
+## Next steps
+
+- [Comments](/comments) — replies, mentions, and discussion threads.
+- [@-mention agents in comments](/mentioning-agents) — member notifications vs. agent runs.
+- [Autopilots](/autopilots) — configure automatic work creation and default subscribers.

@@ -1,0 +1,55 @@
+{
+  "nav": {
+    "inbox": "Inbox",
+    "chat": "Chat",
+    "my_issues": "My Tasks",
+    "issues": "Tasks",
+    "projects": "Projects",
+    "workflows": "Workflows",
+    "autopilots": "Autopilot",
+    "agents": "Agents",
+    "squads": "Squads",
+    "usage": "Usage",
+    "runtimes": "Runtimes",
+    "skills": "Skills",
+    "settings": "Settings"
+  },
+  "tab": {
+    "issue": "Task",
+    "project": "Project",
+    "autopilot": "Autopilot",
+    "agent": "Agent",
+    "member": "Member",
+    "squad": "Squad",
+    "skill": "Skill",
+    "machine": "Machine",
+    "runtime": "Runtime",
+    "attachment": "Attachment",
+    "create_agent": "Create Agent",
+    "unknown": "Unknown page"
+  },
+  "workspace_loader": {
+    "loading_workspace": "Loading workspace…",
+    "loading_named_prefix": "Loading"
+  },
+  "sidebar": {
+    "brand_name": "Silieco",
+    "brand_tagline": "Human + Agent Work OS",
+    "create_project": "Create project",
+    "view_projects": "View all projects",
+    "unpin_tooltip": "Unpin",
+    "workspaces_label": "Workspaces",
+    "create_workspace": "Create workspace",
+    "pending_invitations_label": "Pending invitations",
+    "invitation_workspace_fallback": "Workspace",
+    "invitation_join": "Join",
+    "invitation_decline": "Decline",
+    "log_out": "Log out",
+    "new_issue": "New Task",
+    "new_issue_shortcut": "C",
+    "pinned_label": "Pinned",
+    "workspace_group": "Workspace",
+    "configure_group": "Configure",
+    "unread_overflow": "99+"
+  }
+}

@@ -1,0 +1,55 @@
+---
+title: Workspaces
+description: A workspace is the boundary that keeps teams, work, and agent configuration isolated from each other.
+---
+
+import { Callout } from "fumadocs-ui/components/callout";
+
+A workspace is Silieco's top-level boundary. Members, tasks, projects, agents, skills, and run history all belong to one workspace and are fully isolated from every other.
+
+## What a workspace contains
+
+| Category | Contents |
+|---|---|
+| **Work** | Tasks, projects, comments, attachments, run history |
+| **Team** | Members, roles, invitations |
+| **Agents** | Agent configuration, skills, runtimes, automations |
+| **Shared settings** | Context, labels, custom properties, integrations |
+
+**Context** is provided to every agent in the workspace — the place for team background, product conventions, and long-lived requirements. One-off run requirements belong in the corresponding task.
+
+## Create a workspace
+
+Creating a workspace asks for two things:
+
+- **Name**: shown to members; can be changed later.
+- **Workspace URL**: the slug in the address — the `my-team` in `silieco.ai/my-team`. Lowercase letters, digits, and hyphens only; it cannot collide with an existing workspace or a reserved address, and it cannot be changed after creation.
+
+The creator automatically becomes an `owner`. The task prefix is generated from the workspace name — with the prefix `MUL`, task numbers appear as `SILI-1`, `SILI-2`, counting up independently within the workspace.
+
+## Change settings
+
+`owner` and `admin` can change the name, icon, description, context, and task prefix; `member` can only view them.
+
+
+<Callout type="warning">
+After the task prefix changes, every task immediately switches to the new number (`SILI-5` becomes `NEW-5`), but the old numbers in PRs, branch names, and chat history do not update.
+</Callout>
+
+## Switch and leave
+
+One account can join multiple workspaces. Switching only changes what you are currently viewing; it moves no data.
+
+After leaving a workspace, you need a new invitation to return. Leaving also deactivates the runtimes you own, archives the agents bound to them, and cancels their unfinished runs.
+
+The last `owner` cannot leave; promote another member to `owner` first.
+
+## Delete a workspace
+
+Only an `owner` can delete a workspace. Deletion permanently removes all of its work, members, agent configuration, and run history, and cannot be undone. If you are only stepping away for a while, leave instead of deleting.
+
+## Next steps
+
+- [Members and roles](/members-roles) — invite members and manage roles.
+- [Tasks](/tasks) — the basic unit of work in a workspace.
+- [Agents](/agents) — agent identity and configuration.

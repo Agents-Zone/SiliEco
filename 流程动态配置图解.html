@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>创建阶段模板 · 步骤与看板驱动</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#ffffff; --ink:#0f172a; --sub:#475569; --mute:#64748b;
+    --line:#e2e8f0;
+    --primary:#0e7490; --primary-d:#155e75; --primary-bg:#ecfeff;
+    --ok:#15803d; --ok-bg:#f0fdf4;
+    --gate:#b45309; --gate-bg:#fffbeb;
+    --back:#c2410c;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",Roboto,sans-serif;
+    line-height:1.7; font-size:15px; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1040px; margin:0 auto; padding:40px 24px 80px}
+
+  header{margin-bottom:8px}
+  .eyebrow{font-size:12.5px; letter-spacing:.14em; color:var(--primary); font-weight:600; text-transform:uppercase}
+  h1{font-size:27px; line-height:1.3; margin:8px 0 6px; letter-spacing:-.01em}
+  .lede{font-size:15px; color:var(--sub); max-width:860px; margin:0}
+  .lede b{color:var(--ink); font-weight:600}
+
+  section{margin-top:40px; scroll-margin-top:16px}
+  .sec-head{display:flex; align-items:baseline; gap:12px; margin-bottom:10px}
+  .sec-num{font-size:12.5px; font-weight:700; color:#fff; background:var(--primary); padding:2px 9px; border-radius:5px}
+  h2{font-size:19px; margin:0; letter-spacing:-.01em}
+  .sec-desc{color:var(--sub); font-size:14px; margin:0 0 16px; max-width:860px}
+
+  .figure{background:var(--card); border:1px solid var(--line); border-radius:12px;
+          padding:18px 14px 12px; box-shadow:0 1px 2px rgba(15,23,42,.04)}
+  .figure svg{width:100%; height:auto; display:block}
+  .fig-caption{font-size:12.5px; color:var(--mute); margin:10px 4px 4px; text-align:center}
+
+  /* 相关功能卡片 */
+  .rel{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin-top:8px}
+  .rel-item{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px}
+  .rel-item h4{margin:0 0 4px; font-size:14px; color:var(--ink)}
+  .rel-item p{margin:0; font-size:13px; color:var(--sub); line-height:1.6}
+  .rel-item .tag{display:inline-block; font-size:11px; color:var(--primary-d); background:var(--primary-bg);
+                 padding:1px 8px; border-radius:4px; margin-bottom:6px}
+  @media(max-width:720px){.rel{grid-template-columns:1fr}}
+
+  footer{margin-top:44px; padding-top:18px; border-top:1px solid var(--line); color:var(--mute); font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">编排引擎层 · 功能实现</div>
+  <h1>创建阶段模板：步骤与它如何驱动看板</h1>
+  <p class="lede">阶段模板是流程动态配置的入口。研发要实现的核心是<b>"创建模板"这个配置动作</b>，以及模板保存后如何驱动下游。本页讲两件事：创建模板分几步、每步配什么；配好之后看板的列、卡片状态、流转规则如何<b>全部由模板生成</b>。</p>
+</header>
+
+<!-- ============ 创建模板步骤 ============ -->
+<section id="create">
+  <div class="sec-head"><span class="sec-num">步骤</span><h2>创建阶段模板的六步</h2></div>
+  <p class="sec-desc">用户配置一个模板，按下面六步走。每步对应模板的一个字段组，保存后即成为事项的蓝图。研发按这六组字段设计配置表单或向导。</p>
+
+  <div class="figure">
+  <svg viewBox="0 0 1120 250" font-family="inherit">
+    <defs>
+      <marker id="ar" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill="#0e7490"/></marker>
+    </defs>
+
+    <!-- 节点 ① -->
+    <g>
+      <rect x="20" y="50" width="160" height="120" rx="10" fill="#ecfeff" stroke="#67e8f9" stroke-width="1.5"/>
+      <circle cx="46" cy="76" r="15" fill="#0e7490"/><text x="46" y="81" text-anchor="middle" font-size="14" font-weight="800" fill="#fff">1</text>
+      <text x="100" y="80" text-anchor="middle" font-size="13.5" font-weight="700" fill="#155e75">新建模板</text>
+      <text x="100" y="110" text-anchor="middle" font-size="11" fill="#0e7490">名称</text>
+      <text x="100" y="128" text-anchor="middle" font-size="11" fill="#0e7490">来源（预置/WS/用户）</text>
+      <text x="100" y="146" text-anchor="middle" font-size="11" fill="#0e7490">适用项目范围</text>
+    </g>
+    <line x1="180" y1="110" x2="202" y2="110" stroke="#0e7490" stroke-width="1.8" marker-end="url(#ar)"/>
+
+    <!-- 节点 ② -->
+    <g>
+      <rect x="204" y="50" width="160" height="120" rx="10" fill="#ecfeff" stroke="#67e8f9" stroke-width="1.5"/>
+      <circle cx="230" cy="76" r="15" fill="#0e7490"/><text x="230" y="81" text-anchor="middle" font-size="14" font-weight="800" fill="#fff">2</text>
+      <text x="284" y="80" text-anchor="middle" font-size="13.5" font-weight="700" fill="#155e75">定义阶段</text>
+      <text x="284" y="110" text-anchor="middle" font-size="11" fill="#0e7490">阶段列表</text>
+      <text x="284" y="128" text-anchor="middle" font-size="11" fill="#0e7490">阶段命名</text>
+      <text x="284" y="146" text-anchor="middle" font-size="11" fill="#0e7490">排列顺序</text>
+    </g>
+    <line x1="364" y1="110" x2="386" y2="110" stroke="#0e7490" stroke-width="1.8" marker-end="url(#ar)"/>
+
+    <!-- 节点 ③ -->
+    <g>
+      <rect x="388" y="50" width="160" height="120" rx="10" fill="#ecfeff" stroke="#67e8f9" stroke-width="1.5"/>
+      <circle cx="414" cy="76" r="15" fill="#0e7490"/><text x="414" y="81" text-anchor="middle" font-size="14" font-weight="800" fill="#fff">3</text>
+      <text x="468" y="80" text-anchor="middle" font-size="13.5" font-weight="700" fill="#155e75">配置阶段详情</text>
+      <text x="468" y="108" text-anchor="middle" font-size="11" fill="#0e7490">状态集合</text>
+      <text x="468" y="126" text-anchor="middle" font-size="11" fill="#0e7490">输入 / 输出路径</text>
+      <text x="468" y="144" text-anchor="middle" font-size="11" fill="#0e7490">所需 Skills</text>
+    </g>
+    <line x1="548" y1="110" x2="570" y2="110" stroke="#0e7490" stroke-width="1.8" marker-end="url(#ar)"/>
+
+    <!-- 节点 ④ -->
+    <g>
+      <rect x="572" y="50" width="160" height="120" rx="10" fill="#fffbeb" stroke="#fcd34d" stroke-width="1.5"/>
+      <circle cx="598" cy="76" r="15" fill="#b45309"/><text x="598" y="81" text-anchor="middle" font-size="14" font-weight="800" fill="#fff">4</text>
+      <text x="652" y="80" text-anchor="middle" font-size="13.5" font-weight="700" fill="#92400e">配置门控</text>
+      <text x="652" y="110" text-anchor="middle" font-size="11" fill="#b45309">挂在哪条转换边</text>
+      <text x="652" y="128" text-anchor="middle" font-size="11" fill="#b45309">决策人 / 类型</text>
+      <text x="652" y="146" text-anchor="middle" font-size="11" fill="#b45309">默认 / 自定义</text>
+    </g>
+    <line x1="732" y1="110" x2="754" y2="110" stroke="#0e7490" stroke-width="1.8" marker-end="url(#ar)"/>
+
+    <!-- 节点 ⑤ -->
+    <g>
+      <rect x="756" y="50" width="160" height="120" rx="10" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+      <circle cx="782" cy="76" r="15" fill="#c2410c"/><text x="782" y="81" text-anchor="middle" font-size="14" font-weight="800" fill="#fff">5</text>
+      <text x="836" y="80" text-anchor="middle" font-size="13.5" font-weight="700" fill="#9a3412">配置回退</text>
+      <text x="836" y="116" text-anchor="middle" font-size="11" fill="#c2410c">声明打回可</text>
+      <text x="836" y="134" text-anchor="middle" font-size="11" fill="#c2410c">回退到的目标阶段</text>
+    </g>
+    <line x1="916" y1="110" x2="938" y2="110" stroke="#0e7490" stroke-width="1.8" marker-end="url(#ar)"/>
+
+    <!-- 节点 ⑥ -->
+    <g>
+      <rect x="940" y="50" width="160" height="120" rx="10" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+      <circle cx="966" cy="76" r="15" fill="#15803d"/><text x="966" y="81" text-anchor="middle" font-size="14" font-weight="800" fill="#fff">6</text>
+      <text x="1020" y="80" text-anchor="middle" font-size="13.5" font-weight="700" fill="#166534">保存发布</text>
+      <text x="1020" y="110" text-anchor="middle" font-size="11" fill="#15803d">纳入项目可用范围</text>
+      <text x="1020" y="128" text-anchor="middle" font-size="11" fill="#15803d">进入模板市场</text>
+      <text x="1020" y="146" text-anchor="middle" font-size="11" fill="#15803d">可被复制 / 修改</text>
+    </g>
+
+    <text x="560" y="210" text-anchor="middle" font-size="12.5" fill="#64748b">这六组字段就是阶段模板的全部配置。保存后，模板成为事项的蓝图，下游所有呈现与行为都从它派生。</text>
+  </svg>
+  <div class="fig-caption">图 1　创建阶段模板的六个配置步骤</div>
+  </div>
+</section>
+
+<!-- ============ 模板驱动看板 ============ -->
+<section id="board">
+  <div class="sec-head"><span class="sec-num">驱动</span><h2>模板如何驱动看板</h2></div>
+  <p class="sec-desc">模板保存后，用户创建事项选了这个模板，看板就<b>按模板自动生成</b>。看板的列、卡片状态、流转规则全部来自模板，换个模板看板就变样。以投标模板为例。</p>
+
+  <div class="figure">
+  <svg viewBox="0 0 1080 480" font-family="inherit">
+    <!-- 标签：模板定义层 -->
+    <text x="40" y="32" font-size="13" font-weight="700" fill="#155e75">▼ 模板定义（研发配置产物）</text>
+
+    <!-- 上排：模板阶段块 -->
+    <g font-size="11.5">
+      <!-- S1 -->
+      <rect x="25" y="50" width="190" height="92" rx="9" fill="#ecfeff" stroke="#67e8f9"/>
+      <text x="120" y="72" text-anchor="middle" font-weight="700" fill="#155e75">阶段 1 招标文件分析</text>
+      <text x="120" y="94" text-anchor="middle" font-size="10.5" fill="#0e7490">状态：todo / doing / done</text>
+      <text x="120" y="112" text-anchor="middle" font-size="10.5" fill="#0e7490">门控：无</text>
+      <text x="120" y="130" text-anchor="middle" font-size="10.5" fill="#0e7490">out: 分析报告.md</text>
+      <!-- S2 -->
+      <rect x="235" y="50" width="190" height="92" rx="9" fill="#ecfeff" stroke="#67e8f9"/>
+      <text x="330" y="72" text-anchor="middle" font-weight="700" fill="#155e75">阶段 2 投标方案制定</text>
+      <text x="330" y="94" text-anchor="middle" font-size="10.5" fill="#0e7490">状态：todo / doing / done</text>
+      <text x="330" y="112" text-anchor="middle" font-size="10.5" fill="#0e7490">门控：无</text>
+      <text x="330" y="130" text-anchor="middle" font-size="10.5" fill="#0e7490">out: 投标方案.md</text>
+      <!-- S3 -->
+      <rect x="445" y="50" width="190" height="92" rx="9" fill="#ecfeff" stroke="#67e8f9"/>
+      <text x="540" y="72" text-anchor="middle" font-weight="700" fill="#155e75">阶段 3 投标标书编写</text>
+      <text x="540" y="94" text-anchor="middle" font-size="10.5" fill="#0e7490">状态：todo / doing / done</text>
+      <text x="540" y="112" text-anchor="middle" font-size="10.5" fill="#0e7490">门控：无</text>
+      <text x="540" y="130" text-anchor="middle" font-size="10.5" fill="#0e7490">out: 技术/商务标.md</text>
+      <!-- S4 门控 -->
+      <rect x="655" y="50" width="190" height="92" rx="9" fill="#fffbeb" stroke="#fbbf24" stroke-width="1.6"/>
+      <text x="750" y="72" text-anchor="middle" font-weight="700" fill="#92400e">阶段 4 审核校验 ⚠</text>
+      <text x="750" y="94" text-anchor="middle" font-size="10.5" fill="#b45309">状态：todo / doing / done</text>
+      <text x="750" y="112" text-anchor="middle" font-size="10.5" fill="#b45309" font-weight="600">门控：出阶段需人工决策</text>
+      <text x="750" y="130" text-anchor="middle" font-size="10.5" fill="#b45309">决策人：@bid-lead</text>
+      <!-- S5 -->
+      <rect x="865" y="50" width="190" height="92" rx="9" fill="#ecfeff" stroke="#67e8f9"/>
+      <text x="960" y="72" text-anchor="middle" font-weight="700" fill="#155e75">阶段 5 得分点比较</text>
+      <text x="960" y="94" text-anchor="middle" font-size="10.5" fill="#0e7490">状态：todo / doing / done</text>
+      <text x="960" y="112" text-anchor="middle" font-size="10.5" fill="#0e7490">门控：无</text>
+      <text x="960" y="130" text-anchor="middle" font-size="10.5" fill="#0e7490">out: 得分分析.md</text>
+    </g>
+
+    <!-- 映射虚线 -->
+    <g stroke="#94a3b8" stroke-dasharray="4 4" stroke-width="1.4">
+      <line x1="120" y1="142" x2="120" y2="222"/>
+      <line x1="330" y1="142" x2="330" y2="222"/>
+      <line x1="540" y1="142" x2="540" y2="222"/>
+      <line x1="750" y1="142" x2="750" y2="222"/>
+      <line x1="960" y1="142" x2="960" y2="222"/>
+    </g>
+    <rect x="430" y="170" width="220" height="26" rx="13" fill="#fff" stroke="#cbd5e1"/>
+    <text x="540" y="187" text-anchor="middle" font-size="12" font-weight="600" fill="#334155">实例化事项 · 渲染看板</text>
+
+    <!-- 标签：看板呈现层 -->
+    <text x="40" y="248" font-size="13" font-weight="700" fill="#166534">▼ 看板呈现（用户看到的）</text>
+
+    <!-- 下排：看板列 -->
+    <g font-size="11">
+      <!-- 列1 -->
+      <rect x="25" y="262" width="190" height="170" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
+      <rect x="25" y="262" width="190" height="28" rx="9" fill="#ecfeff"/>
+      <rect x="25" y="283" width="190" height="7" fill="#ecfeff"/>
+      <text x="38" y="281" font-weight="700" fill="#155e75">招标文件分析</text>
+      <rect x="38" y="302" width="164" height="40" rx="6" fill="#fff" stroke="#cbd5e1"/>
+      <circle cx="50" cy="322" r="5" fill="#bbf7d0" stroke="#15803d"/><text x="62" y="326" fill="#334155">事项 A · done</text>
+      <rect x="38" y="350" width="164" height="40" rx="6" fill="#fff" stroke="#cbd5e1"/>
+      <circle cx="50" cy="370" r="5" fill="#fef3c7" stroke="#b45309"/><text x="62" y="374" fill="#334155">事项 B · doing</text>
+
+      <!-- 列2 -->
+      <rect x="235" y="262" width="190" height="170" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
+      <rect x="235" y="262" width="190" height="28" rx="9" fill="#ecfeff"/>
+      <rect x="235" y="283" width="190" height="7" fill="#ecfeff"/>
+      <text x="248" y="281" font-weight="700" fill="#155e75">投标方案制定</text>
+      <rect x="248" y="302" width="164" height="40" rx="6" fill="#fff" stroke="#cbd5e1"/>
+      <circle cx="260" cy="322" r="5" fill="#e2e8f0" stroke="#94a3b8"/><text x="272" y="326" fill="#334155">事项 C · todo</text>
+
+      <!-- 列3 -->
+      <rect x="445" y="262" width="190" height="170" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
+      <rect x="445" y="262" width="190" height="28" rx="9" fill="#ecfeff"/>
+      <rect x="445" y="283" width="190" height="7" fill="#ecfeff"/>
+      <text x="458" y="281" font-weight="700" fill="#155e75">投标标书编写</text>
+
+      <!-- 列4 门控 -->
+      <rect x="655" y="262" width="190" height="170" rx="9" fill="#fffbeb" stroke="#fcd34d"/>
+      <rect x="655" y="262" width="190" height="28" rx="9" fill="#fef3c7"/>
+      <rect x="655" y="283" width="190" height="7" fill="#fef3c7"/>
+      <text x="668" y="281" font-weight="700" fill="#92400e">审核校验</text>
+      <text x="822" y="281" text-anchor="end" font-size="13" fill="#b45309">🔒</text>
+      <rect x="668" y="302" width="164" height="46" rx="6" fill="#fff" stroke="#fcd34d"/>
+      <circle cx="680" cy="318" r="5" fill="#fef3c7" stroke="#b45309"/><text x="692" y="322" fill="#334155">事项 D · doing</text>
+      <text x="680" y="340" font-size="9.5" fill="#b45309">⚠ 出列需门控决策</text>
+
+      <!-- 列5 -->
+      <rect x="865" y="262" width="190" height="170" rx="9" fill="#f8fafc" stroke="#e2e8f0"/>
+      <rect x="865" y="262" width="190" height="28" rx="9" fill="#ecfeff"/>
+      <rect x="865" y="283" width="190" height="7" fill="#ecfeff"/>
+      <text x="878" y="281" font-weight="700" fill="#155e75">得分点比较</text>
+    </g>
+
+    <!-- 映射说明条 -->
+    <g font-size="11.5">
+      <rect x="25" y="448" width="1030" height="24" rx="6" fill="#f1f5f9" stroke="#e2e8f0"/>
+      <text x="40" y="464" fill="#334155"><tspan font-weight="700" fill="#0e7490">看板列 = 模板阶段</tspan>　·　<tspan font-weight="700" fill="#0e7490">卡片状态圆点 = 阶段状态集合</tspan>　·　<tspan font-weight="700" fill="#0e7490">门控列 = 卡片不能直接拖过，需决策</tspan>　·　<tspan font-weight="700" fill="#0e7490">换模板 → 看板重生成</tspan></text>
+    </g>
+  </svg>
+  <div class="fig-caption">图 2　模板定义（上）逐字段映射为看板呈现（下）</div>
+  </div>
+</section>
+
+<!-- ============ 相关功能 ============ -->
+<section id="rel">
+  <div class="sec-head"><span class="sec-num">相关</span><h2>模板还驱动了什么</h2></div>
+  <p class="sec-desc">除看板外，阶段模板的字段还驱动下面这些功能。每个都是模板配置的直接下游，研发实现时从模板字段读取即可。</p>
+
+  <div class="rel">
+    <div class="rel-item">
+      <span class="tag">阶段列表</span>
+      <h4>事项创建与实例化</h4>
+      <p>用户创建事项时，只能从项目允许的模板里选。选定后深拷贝模板生成事项状态机，事项从此按这套阶段跑。</p>
+    </div>
+    <div class="rel-item">
+      <span class="tag">输入 / 输出路径</span>
+      <h4>产物自动同步</h4>
+      <p>事项进入阶段时，平台按模板声明的路径从 Git 拉取输入、推送输出，无需事项自己管文件位置。</p>
+    </div>
+    <div class="rel-item">
+      <span class="tag">所需 Skills</span>
+      <h4>Agent 能力匹配</h4>
+      <p>阶段所需 Skills 是执行前置条件。Agent 缺 Skill 时平台告警，由 Owner 追加或换 Agent。</p>
+    </div>
+    <div class="rel-item">
+      <span class="tag">门控 + 回退</span>
+      <h4>决策与回退</h4>
+      <p>转换边上的门控决定哪里要暂停等决策；回退规则决定打回到哪个阶段。两者都配置在模板里。</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+依据《协作平台功能清单.md》编排引擎层（阶段模板自定义、阶段模板市场、事项创建与实例化、默认门控、自定义门控、回退机制）整理。单文件 HTML，浏览器直接打开。
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,214 @@
+-- name: ListWorkflows :many
+SELECT * FROM workflow
+WHERE workspace_id = $1
+  AND (sqlc.narg('project_id')::uuid IS NULL OR project_id = sqlc.narg('project_id'))
+  AND (sqlc.arg('include_archived')::boolean OR status <> 'archived')
+ORDER BY updated_at DESC, created_at DESC;
+
+-- name: GetWorkflowInWorkspace :one
+SELECT * FROM workflow
+WHERE id = $1 AND workspace_id = $2;
+
+-- name: CreateWorkflow :one
+INSERT INTO workflow (
+    workspace_id, project_id, name, description, status, created_by
+) VALUES (
+    $1, $2, $3, $4, $5, $6
+) RETURNING *;
+
+-- name: UpdateWorkflowMetadata :one
+UPDATE workflow SET
+    name = COALESCE(sqlc.narg('name'), name),
+    description = sqlc.narg('description'),
+    project_id = COALESCE(sqlc.narg('project_id'), project_id),
+    updated_at = now()
+WHERE id = $1 AND workspace_id = $2
+RETURNING *;
+
+-- name: CountWorkflowInstances :one
+SELECT COUNT(*) FROM workflow_instance
+WHERE workflow_id = $1 AND workspace_id = $2;
+
+-- name: SetWorkflowCurrentVersion :one
+UPDATE workflow SET
+    current_version_id = $3,
+    status = $4,
+    updated_at = now()
+WHERE id = $1 AND workspace_id = $2
+RETURNING *;
+
+-- name: ArchiveWorkflow :one
+UPDATE workflow SET
+    status = 'archived',
+    updated_at = now()
+WHERE id = $1 AND workspace_id = $2
+RETURNING *;
+
+-- name: NextWorkflowVersionNumber :one
+SELECT COALESCE(MAX(version), 0)::integer + 1
+FROM workflow_version
+WHERE workflow_id = $1 AND workspace_id = $2;
+
+-- name: LockWorkflowForVersion :one
+SELECT * FROM workflow
+WHERE id = $1 AND workspace_id = $2
+FOR UPDATE;
+
+-- name: ListWorkflowVersions :many
+SELECT * FROM workflow_version
+WHERE workflow_id = $1 AND workspace_id = $2
+ORDER BY version DESC;
+
+-- name: GetWorkflowVersionInWorkspace :one
+SELECT * FROM workflow_version
+WHERE id = $1 AND workflow_id = $2 AND workspace_id = $3;
+
+-- name: CreateWorkflowVersion :one
+INSERT INTO workflow_version (
+    workspace_id, workflow_id, version, status, created_by
+) VALUES (
+    $1, $2, $3, $4, $5
+) RETURNING *;
+
+-- name: PublishWorkflowVersion :one
+UPDATE workflow_version SET
+    status = 'published',
+    published_at = COALESCE(published_at, now())
+WHERE id = $1 AND workflow_id = $2 AND workspace_id = $3
+RETURNING *;
+
+-- name: SupersedeOtherWorkflowVersions :exec
+UPDATE workflow_version SET
+    status = 'superseded'
+WHERE workflow_id = $1
+  AND workspace_id = $2
+  AND id <> $3
+  AND status = 'published';
+
+-- name: ListWorkflowStages :many
+SELECT * FROM workflow_stage
+WHERE workflow_version_id = $1 AND workspace_id = $2
+ORDER BY position ASC;
+
+-- name: GetWorkflowStageInVersion :one
+SELECT * FROM workflow_stage
+WHERE id = $1
+  AND workflow_version_id = $2
+  AND workspace_id = $3;
+
+-- name: GetWorkflowStageByStableKey :one
+SELECT * FROM workflow_stage
+WHERE workflow_version_id = $1
+  AND workspace_id = $2
+  AND stable_key = $3;
+
+-- name: GetFirstWorkflowStage :one
+SELECT * FROM workflow_stage
+WHERE workflow_version_id = $1 AND workspace_id = $2
+ORDER BY position ASC
+LIMIT 1;
+
+-- name: GetNextWorkflowStage :one
+SELECT * FROM workflow_stage
+WHERE workflow_version_id = $1
+  AND workspace_id = $2
+  AND position > $3
+ORDER BY position ASC
+LIMIT 1;
+
+-- name: CreateWorkflowStage :one
+INSERT INTO workflow_stage (
+    workspace_id, workflow_version_id, stable_key, name, description,
+    position, completion_rule, input_spec, output_spec, required_skills,
+    gate, rollback_stage_key
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10,
+    $11, $12
+) RETURNING *;
+
+-- name: ListWorkflowInstances :many
+SELECT * FROM workflow_instance
+WHERE workspace_id = $1
+  AND (sqlc.narg('workflow_id')::uuid IS NULL OR workflow_id = sqlc.narg('workflow_id'))
+  AND (sqlc.narg('project_id')::uuid IS NULL OR project_id = sqlc.narg('project_id'))
+  AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
+ORDER BY updated_at DESC, created_at DESC;
+
+-- name: GetWorkflowInstanceInWorkspace :one
+SELECT * FROM workflow_instance
+WHERE id = $1 AND workspace_id = $2;
+
+-- name: CreateWorkflowInstance :one
+INSERT INTO workflow_instance (
+    workspace_id, workflow_id, workflow_version_id, title, description,
+    status, current_stage_id, project_id, created_by, started_at
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9,
+    CASE WHEN $6 = 'active' THEN now() ELSE NULL END
+) RETURNING *;
+
+-- name: UpdateWorkflowInstanceState :one
+UPDATE workflow_instance SET
+    status = COALESCE(sqlc.narg('status'), status),
+    current_stage_id = COALESCE(sqlc.narg('current_stage_id'), current_stage_id),
+    started_at = CASE
+        WHEN sqlc.narg('status')::text = 'active' THEN COALESCE(started_at, now())
+        ELSE started_at
+    END,
+    completed_at = CASE
+        WHEN sqlc.narg('status')::text = 'completed' THEN COALESCE(completed_at, now())
+        WHEN sqlc.narg('status')::text IS NOT NULL AND sqlc.narg('status')::text <> 'completed' THEN NULL
+        ELSE completed_at
+    END,
+    updated_at = now()
+WHERE id = $1 AND workspace_id = $2
+RETURNING *;
+
+-- name: CreateWorkflowGateDecision :one
+INSERT INTO workflow_gate_decision (
+    workspace_id, workflow_instance_id, from_stage_id, to_stage_id,
+    outcome, actor_type, actor_id, note
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6, $7, $8
+) RETURNING *;
+
+-- name: ListWorkflowGateDecisions :many
+SELECT * FROM workflow_gate_decision
+WHERE workflow_instance_id = $1 AND workspace_id = $2
+ORDER BY created_at DESC;
+
+-- name: ListIssuesForWorkflowInstance :many
+SELECT * FROM issue
+WHERE workspace_id = $1
+  AND workflow_instance_id = $2
+ORDER BY workflow_stage_id, position ASC, created_at ASC;
+
+-- name: AttachIssueToWorkflowStage :one
+UPDATE issue SET
+    workflow_instance_id = $3,
+    workflow_stage_id = $4,
+    project_id = $5,
+    updated_at = now()
+WHERE id = $1 AND workspace_id = $2
+RETURNING *;
+
+-- name: DetachIssueFromWorkflow :one
+UPDATE issue SET
+    workflow_instance_id = NULL,
+    workflow_stage_id = NULL,
+    updated_at = now()
+WHERE id = $1
+  AND workspace_id = $2
+  AND workflow_instance_id = $3
+RETURNING *;
+
+-- name: CountOpenIssuesInWorkflowStage :one
+SELECT count(*)::bigint
+FROM issue
+WHERE workspace_id = $1
+  AND workflow_instance_id = $2
+  AND workflow_stage_id = $3
+  AND status NOT IN ('done', 'cancelled');

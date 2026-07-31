@@ -1,0 +1,55 @@
+{
+  "nav": {
+    "inbox": "インボックス",
+    "chat": "チャット",
+    "my_issues": "マイTask",
+    "issues": "Task",
+    "projects": "プロジェクト",
+    "workflows": "ワークフロー",
+    "autopilots": "オートパイロット",
+    "agents": "エージェント",
+    "squads": "スクワッド",
+    "usage": "使用量",
+    "runtimes": "ランタイム",
+    "skills": "スキル",
+    "settings": "設定"
+  },
+  "tab": {
+    "issue": "Task",
+    "project": "プロジェクト",
+    "autopilot": "オートパイロット",
+    "agent": "エージェント",
+    "member": "メンバー",
+    "squad": "スクワッド",
+    "skill": "スキル",
+    "machine": "マシン",
+    "runtime": "ランタイム",
+    "attachment": "添付ファイル",
+    "create_agent": "エージェントを作成",
+    "unknown": "不明なページ"
+  },
+  "workspace_loader": {
+    "loading_workspace": "ワークスペースを読み込み中…",
+    "loading_named_prefix": "読み込み中"
+  },
+  "sidebar": {
+    "brand_name": "Silieco",
+    "brand_tagline": "Human + Agent Work OS",
+    "create_project": "プロジェクトを作成",
+    "view_projects": "すべてのプロジェクトを表示",
+    "unpin_tooltip": "ピン留めを解除",
+    "workspaces_label": "ワークスペース",
+    "create_workspace": "ワークスペースを作成",
+    "pending_invitations_label": "保留中の招待",
+    "invitation_workspace_fallback": "ワークスペース",
+    "invitation_join": "参加",
+    "invitation_decline": "辞退",
+    "log_out": "ログアウト",
+    "new_issue": "新規Task",
+    "new_issue_shortcut": "C",
+    "pinned_label": "ピン留め済み",
+    "workspace_group": "ワークスペース",
+    "configure_group": "設定",
+    "unread_overflow": "99+"
+  }
+}
