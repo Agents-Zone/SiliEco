@@ -1,7 +1,11 @@
 -- name: ListWorkflows :many
 SELECT * FROM workflow
 WHERE workspace_id = $1
-  AND (sqlc.narg('project_id')::uuid IS NULL OR project_id = sqlc.narg('project_id'))
+  AND (
+    sqlc.narg('project_id')::uuid IS NULL
+    OR project_id IS NULL
+    OR project_id = sqlc.narg('project_id')
+  )
   AND (sqlc.arg('include_archived')::boolean OR status <> 'archived')
 ORDER BY updated_at DESC, created_at DESC;
 
@@ -134,6 +138,22 @@ WHERE workspace_id = $1
   AND (sqlc.narg('project_id')::uuid IS NULL OR project_id = sqlc.narg('project_id'))
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
 ORDER BY updated_at DESC, created_at DESC;
+
+-- name: CountIssuesInWorkflowInstance :one
+SELECT count(*)::bigint
+FROM issue
+WHERE workspace_id = $1
+  AND workflow_instance_id = $2;
+
+-- name: ArchiveWorkflowInstance :one
+UPDATE workflow_instance SET
+    archived_at = now(),
+    archived_by = $3,
+    updated_at = now()
+WHERE id = $1
+  AND workspace_id = $2
+  AND archived_at IS NULL
+RETURNING *;
 
 -- name: GetWorkflowInstanceInWorkspace :one
 SELECT * FROM workflow_instance

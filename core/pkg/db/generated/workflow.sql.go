@@ -11,6 +11,47 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const archiveWorkflowInstance = `-- name: ArchiveWorkflowInstance :one
+UPDATE workflow_instance SET
+    archived_at = now(),
+    archived_by = $3,
+    updated_at = now()
+WHERE id = $1
+  AND workspace_id = $2
+  AND archived_at IS NULL
+RETURNING id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by
+`
+
+type ArchiveWorkflowInstanceParams struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ArchivedBy  pgtype.UUID `json:"archived_by"`
+}
+
+func (q *Queries) ArchiveWorkflowInstance(ctx context.Context, arg ArchiveWorkflowInstanceParams) (WorkflowInstance, error) {
+	row := q.db.QueryRow(ctx, archiveWorkflowInstance, arg.ID, arg.WorkspaceID, arg.ArchivedBy)
+	var i WorkflowInstance
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.WorkflowID,
+		&i.WorkflowVersionID,
+		&i.Title,
+		&i.Description,
+		&i.Status,
+		&i.CurrentStageID,
+		&i.ProjectID,
+		&i.CreatedBy,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
+	)
+	return i, err
+}
+
 const archiveWorkflow = `-- name: ArchiveWorkflow :one
 UPDATE workflow SET
     status = 'archived',
@@ -115,6 +156,25 @@ type CountOpenIssuesInWorkflowStageParams struct {
 	WorkspaceID        pgtype.UUID `json:"workspace_id"`
 	WorkflowInstanceID pgtype.UUID `json:"workflow_instance_id"`
 	WorkflowStageID    pgtype.UUID `json:"workflow_stage_id"`
+}
+
+const countIssuesInWorkflowInstance = `-- name: CountIssuesInWorkflowInstance :one
+SELECT count(*)::bigint
+FROM issue
+WHERE workspace_id = $1
+  AND workflow_instance_id = $2
+`
+
+type CountIssuesInWorkflowInstanceParams struct {
+	WorkspaceID        pgtype.UUID `json:"workspace_id"`
+	WorkflowInstanceID pgtype.UUID `json:"workflow_instance_id"`
+}
+
+func (q *Queries) CountIssuesInWorkflowInstance(ctx context.Context, arg CountIssuesInWorkflowInstanceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countIssuesInWorkflowInstance, arg.WorkspaceID, arg.WorkflowInstanceID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 func (q *Queries) CountOpenIssuesInWorkflowStage(ctx context.Context, arg CountOpenIssuesInWorkflowStageParams) (int64, error) {
@@ -239,7 +299,7 @@ INSERT INTO workflow_instance (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9,
     CASE WHEN $6 = 'active' THEN now() ELSE NULL END
-) RETURNING id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at
+) RETURNING id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by
 `
 
 type CreateWorkflowInstanceParams struct {
@@ -282,6 +342,8 @@ func (q *Queries) CreateWorkflowInstance(ctx context.Context, arg CreateWorkflow
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
 	)
 	return i, err
 }
@@ -539,7 +601,7 @@ func (q *Queries) GetWorkflowInWorkspace(ctx context.Context, arg GetWorkflowInW
 }
 
 const getWorkflowInstanceInWorkspace = `-- name: GetWorkflowInstanceInWorkspace :one
-SELECT id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at FROM workflow_instance
+SELECT id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by FROM workflow_instance
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -566,6 +628,8 @@ func (q *Queries) GetWorkflowInstanceInWorkspace(ctx context.Context, arg GetWor
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
 	)
 	return i, err
 }
@@ -771,7 +835,7 @@ func (q *Queries) ListWorkflowGateDecisions(ctx context.Context, arg ListWorkflo
 }
 
 const listWorkflowInstances = `-- name: ListWorkflowInstances :many
-SELECT id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at FROM workflow_instance
+SELECT id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by FROM workflow_instance
 WHERE workspace_id = $1
   AND ($2::uuid IS NULL OR workflow_id = $2)
   AND ($3::uuid IS NULL OR project_id = $3)
@@ -815,6 +879,8 @@ func (q *Queries) ListWorkflowInstances(ctx context.Context, arg ListWorkflowIns
 			&i.CompletedAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ArchivedAt,
+			&i.ArchivedBy,
 		); err != nil {
 			return nil, err
 		}
@@ -915,7 +981,11 @@ func (q *Queries) ListWorkflowVersions(ctx context.Context, arg ListWorkflowVers
 const listWorkflows = `-- name: ListWorkflows :many
 SELECT id, workspace_id, name, description, status, current_version_id, created_by, created_at, updated_at, project_id FROM workflow
 WHERE workspace_id = $1
-  AND ($2::uuid IS NULL OR project_id = $2)
+  AND (
+    $2::uuid IS NULL
+    OR project_id IS NULL
+    OR project_id = $2
+  )
   AND ($3::boolean OR status <> 'archived')
 ORDER BY updated_at DESC, created_at DESC
 `
@@ -1108,7 +1178,7 @@ UPDATE workflow_instance SET
     END,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at
+RETURNING id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by
 `
 
 type UpdateWorkflowInstanceStateParams struct {
@@ -1141,6 +1211,8 @@ func (q *Queries) UpdateWorkflowInstanceState(ctx context.Context, arg UpdateWor
 		&i.CompletedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
 	)
 	return i, err
 }

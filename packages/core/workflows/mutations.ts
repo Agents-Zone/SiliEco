@@ -140,6 +140,22 @@ export function useTransitionWorkflowInstance() {
   });
 }
 
+export function useArchiveWorkflowInstance() {
+  const queryClient = useQueryClient();
+  const workspaceId = useWorkspaceId();
+  return useMutation({
+    mutationFn: (instanceId: string) => api.archiveWorkflowInstance(instanceId),
+    onSettled: (_data, _error, instanceId) => {
+      queryClient.invalidateQueries({
+        queryKey: workflowKeys.instance(workspaceId, instanceId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: workflowKeys.instances(workspaceId),
+      });
+    },
+  });
+}
+
 export function useAttachWorkflowTask() {
   const queryClient = useQueryClient();
   const workspaceId = useWorkspaceId();

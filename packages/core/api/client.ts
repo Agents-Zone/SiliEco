@@ -2689,6 +2689,19 @@ export class ApiClient {
     );
   }
 
+  async archiveWorkflowInstance(id: string): Promise<WorkflowInstance> {
+    const raw = await this.fetch<unknown>(
+      `/api/workflow-instances/${id}/archive`,
+      { method: "POST" },
+    );
+    return parseWithFallback(
+      raw,
+      WorkflowInstanceSchema,
+      EMPTY_WORKFLOW_INSTANCE,
+      { endpoint: "POST /api/workflow-instances/{id}/archive" },
+    );
+  }
+
   async listWorkflowTasks(id: string): Promise<ListWorkflowTasksResponse> {
     const raw = await this.fetch<unknown>(
       `/api/workflow-instances/${id}/tasks`,

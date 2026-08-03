@@ -80,6 +80,9 @@ export interface WorkflowInstance {
   created_by: string;
   started_at: string | null;
   completed_at: string | null;
+  task_count: number;
+  archived_at: string | null;
+  archived_by: string | null;
   created_at: string;
   updated_at: string;
   stages?: WorkflowStage[];
@@ -100,7 +103,7 @@ export interface WorkflowStageInput {
 }
 
 export interface CreateWorkflowRequest {
-  project_id: string;
+  project_id?: string | null;
   name: string;
   description?: string | null;
   publish?: boolean;

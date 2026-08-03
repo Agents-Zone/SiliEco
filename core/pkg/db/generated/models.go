@@ -1211,6 +1211,8 @@ type WorkflowInstance struct {
 	CompletedAt       pgtype.Timestamptz `json:"completed_at"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	ArchivedAt        pgtype.Timestamptz `json:"archived_at"`
+	ArchivedBy        pgtype.UUID        `json:"archived_by"`
 }
 
 type WorkflowStage struct {

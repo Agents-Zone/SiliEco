@@ -78,6 +78,7 @@ import {
   sortWorkflowTasksByLifecycle,
   WORKFLOW_TASK_STATUSES,
 } from "./workflow-task-sort";
+import { ProjectSopDesigner } from "./project-sop-designer";
 
 const ALL_TASK_STATUSES = "all";
 
@@ -644,7 +645,11 @@ function WorkflowDefinitionCard({
   );
 }
 
-export function WorkflowsPage({
+export function WorkflowsPage({ workflowId }: { workflowId?: string }) {
+  return <ProjectSopDesigner workflowId={workflowId} />;
+}
+
+export function LegacyWorkflowsPage({
   workflowId: routeWorkflowId,
   projectId,
   embedded = false,
@@ -666,10 +671,14 @@ export function WorkflowsPage({
     ? embeddedSelectedId ?? workflows[0]?.id
     : routeWorkflowId ?? workflows[0]?.id;
   const selected = workflows.find((workflow) => workflow.id === selectedId);
-  const { data: instances = [] } = useQuery({
+  const { data: allInstances = [] } = useQuery({
     ...workflowInstancesOptions(workspaceId, selectedId, projectId),
     enabled: Boolean(selectedId),
   });
+  const instances = useMemo(
+    () => allInstances.filter((item) => !item.archived_at),
+    [allInstances],
+  );
   const [selectedInstanceId, setSelectedInstanceId] = useState<string>();
   useEffect(() => {
     if (

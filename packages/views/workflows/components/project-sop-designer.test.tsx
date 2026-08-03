@@ -4,10 +4,14 @@ import { I18nProvider } from "@silieco/core/i18n/react";
 import enWorkflows from "../../locales/en/workflows.json";
 import { ProjectSopDesigner } from "./project-sop-designer";
 
-const { createInstance, createWorkflow, runs, workflows } = vi.hoisted(() => ({
+const { agents, archiveInstance, createInstance, createWorkflow, members, runs, skills, workflows } = vi.hoisted(() => ({
+  agents: { current: [] as unknown[] },
+  archiveInstance: vi.fn(),
   createInstance: vi.fn(),
   createWorkflow: vi.fn(),
+  members: { current: [] as unknown[] },
   runs: { current: [] as unknown[] },
+  skills: { current: [] as unknown[] },
   workflows: { current: [] as unknown[] },
 }));
 
@@ -26,13 +30,57 @@ vi.mock("@silieco/core/workflows", () => ({
     isPending: false,
     mutate: createInstance,
   }),
+  useArchiveWorkflowInstance: () => ({
+    isPending: false,
+    mutate: archiveInstance,
+  }),
+}));
+
+vi.mock("@silieco/core/workspace/queries", () => ({
+  agentListOptions: () => ({ queryKey: ["workspace-agents"] }),
+  memberListOptions: () => ({ queryKey: ["workspace-members"] }),
+  skillListOptions: () => ({ queryKey: ["workspace-skills"] }),
 }));
 
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: ({ queryKey }: { queryKey: string[] }) =>
-    queryKey[0] === "workflow-runs"
-      ? { data: runs.current, isLoading: false }
-      : { data: workflows.current, isLoading: false },
+  useQuery: ({ queryKey }: { queryKey: string[] }) => {
+    const data =
+      queryKey[0] === "workflow-runs"
+        ? runs.current
+        : queryKey[0] === "workspace-members"
+          ? members.current
+          : queryKey[0] === "workspace-agents"
+            ? agents.current
+            : queryKey[0] === "workspace-skills"
+              ? skills.current
+              : workflows.current;
+    return { data, isLoading: false };
+  },
+}));
+
+vi.mock("../../common/actor-avatar", () => ({
+  ActorAvatar: ({ actorId }: { actorId: string }) => (
+    <span data-testid={`avatar-${actorId}`} />
+  ),
+}));
+
+vi.mock("../../editor", () => ({
+  ContentEditor: ({
+    defaultValue,
+    onUpdate,
+    placeholder,
+  }: {
+    defaultValue: string;
+    onUpdate: (value: string) => void;
+    placeholder: string;
+  }) => (
+    <textarea
+      defaultValue={defaultValue}
+      placeholder={placeholder}
+      onChange={(event) => onUpdate(event.currentTarget.value)}
+    />
+  ),
+  ReadonlyContent: ({ content }: { content: string }) => <div>{content}</div>,
 }));
 
 function renderDesigner() {
@@ -46,8 +94,19 @@ function renderDesigner() {
 describe("ProjectSopDesigner", () => {
   beforeEach(() => {
     createInstance.mockReset();
+    archiveInstance.mockReset();
     createWorkflow.mockReset();
+    agents.current = [];
+    members.current = [
+      {
+        user_id: "owner-1",
+        role: "owner",
+        name: "Workspace Owner",
+        email: "owner@example.com",
+      },
+    ];
     runs.current = [];
+    skills.current = [];
     workflows.current = [];
   });
 
@@ -100,6 +159,48 @@ describe("ProjectSopDesigner", () => {
     );
   });
 
+  it("shows SOP runs that belong to the current Project", () => {
+    workflows.current = [
+      {
+        id: "workflow-1",
+        project_id: null,
+        name: "Release SOP",
+        description: "Ship safely",
+        status: "published",
+        current_version: {
+          stages: [
+            {
+              id: "stage-build",
+              name: "Build",
+              completion_rule: {},
+              input_spec: {},
+              output_spec: {},
+              required_skills: [],
+              gate: { type: "none" },
+            },
+          ],
+        },
+      },
+    ];
+    runs.current = [
+      {
+        id: "run-1",
+        workflow_id: "workflow-1",
+        title: "Mobile rollout",
+        status: "active",
+        current_stage_id: "stage-build",
+      },
+    ];
+
+    renderDesigner();
+
+    expect(screen.getByText("SOP runs in this Project")).toBeInTheDocument();
+    expect(screen.getByText("Mobile rollout")).toBeInTheDocument();
+    expect(screen.getAllByText("Release SOP").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Build").length).toBeGreaterThan(0);
+    expect(screen.getByText("Active")).toBeInTheDocument();
+  });
+
   it("loads the software template into a five-Stage SOP editor", () => {
     renderDesigner();
 
@@ -109,7 +210,7 @@ describe("ProjectSopDesigner", () => {
     expect(screen.getByDisplayValue("需求设计")).toBeInTheDocument();
     expect(screen.getByDisplayValue("架构设计")).toBeInTheDocument();
     expect(screen.getByDisplayValue("开发实现")).toBeInTheDocument();
-    expect(screen.getAllByDisplayValue("E2E 测试")).toHaveLength(2);
+    expect(screen.getByDisplayValue("E2E 测试")).toBeInTheDocument();
     expect(screen.getByDisplayValue("发布验收")).toBeInTheDocument();
   });
 
@@ -122,10 +223,10 @@ describe("ProjectSopDesigner", () => {
     expect(createWorkflow).toHaveBeenCalledTimes(1);
     const [payload] = createWorkflow.mock.calls[0]!;
     expect(payload).toMatchObject({
-      project_id: "project-1",
       name: "软件开发模板",
       publish: true,
     });
+    expect(payload).not.toHaveProperty("project_id");
     expect(payload.stages).toHaveLength(5);
     expect(payload.stages[2]).toMatchObject({
       stable_key: "stage_3",
@@ -138,6 +239,73 @@ describe("ProjectSopDesigner", () => {
         decider_type: "self_agent",
         decider: "@self",
       },
+      completion_rule: expect.objectContaining({
+        evaluation_mode: "on_task_change",
+      }),
+    });
+  });
+
+  it("creates a Project variant from a reusable Space SOP", () => {
+    workflows.current = [
+      {
+        id: "space-workflow-1",
+        project_id: null,
+        name: "Release SOP",
+        description: "Ship safely",
+        status: "published",
+        current_version: {
+          version: 2,
+          stages: [
+            {
+              id: "stage-1",
+              name: "Review",
+              description: "Review the complete delivery",
+              completion_rule: {
+                type: "all_tasks_terminal",
+                evaluation_mode: "manual",
+                allowed_task_statuses: ["in_review", "done"],
+              },
+              input_spec: { default_artifact: "release.zip" },
+              output_spec: { default_artifact: "review.md" },
+              required_skills: ["release-review"],
+              gate: {
+                type: "human",
+                decider_type: "human",
+                decider: "@owner",
+                require_human: true,
+              },
+              rollback_stage_key: null,
+            },
+          ],
+        },
+      },
+    ];
+    renderDesigner();
+
+    expect(screen.getByText("Space asset")).toBeInTheDocument();
+    expect(screen.getByText("Evaluate on manual submit")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Inherit and customize" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Publish SOP" }));
+
+    const [payload] = createWorkflow.mock.calls[0]!;
+    expect(payload).toMatchObject({
+      project_id: "project-1",
+      name: "Release SOP Project 版",
+      publish: true,
+      stages: [
+        expect.objectContaining({
+          name: "Review",
+          description: "Review the complete delivery",
+          completion_rule: expect.objectContaining({
+            evaluation_mode: "manual",
+          }),
+          input_spec: { default_artifact: "release.zip" },
+          output_spec: { default_artifact: "review.md" },
+          required_skills: ["release-review"],
+        }),
+      ],
     });
   });
 
@@ -153,5 +321,69 @@ describe("ProjectSopDesigner", () => {
     expect(statusButton).toBeInTheDocument();
     fireEvent.click(statusButton);
     expect(screen.queryByRole("button", { name: "QA ready" })).not.toBeInTheDocument();
+  });
+
+  it("authors artifacts in Markdown and selects real Skills and gate actors", () => {
+    skills.current = [
+      {
+        id: "skill-review",
+        name: "Code review",
+        description: "Review implementation quality",
+      },
+    ];
+    agents.current = [
+      {
+        id: "agent-reviewer",
+        name: "Review Agent",
+        description: "Independent reviewer",
+        archived_at: null,
+      },
+    ];
+    renderDesigner();
+
+    fireEvent.click(screen.getByRole("button", { name: /空白 SOP/ }));
+    fireEvent.change(screen.getByLabelText("SOP name"), {
+      target: { value: "Delivery SOP" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("Stage name"), {
+      target: { value: "Review" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("e.g. requirements.md"), {
+      target: { value: "## Required input\n\n- `PRD.md`" },
+    });
+    fireEvent.change(screen.getByPlaceholderText("e.g. acceptance-report.md"), {
+      target: { value: "## Required output\n\n- `review.md`" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose Skills" }));
+    fireEvent.click(screen.getByRole("button", { name: /Code review/ }));
+    fireEvent.click(screen.getByRole("switch", { name: "Stage exit gate" }));
+    fireEvent.click(
+      screen.getByRole("radio", { name: /Assigned Agent decision/ }),
+    );
+    fireEvent.click(
+      screen.getByRole("switch", {
+        name: "Require final human confirmation even after an Agent decision",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Publish SOP" }));
+
+    const [payload] = createWorkflow.mock.calls[0]!;
+    expect(payload.stages[0]).toMatchObject({
+      input_spec: {
+        default_artifact: "## Required input\n\n- `PRD.md`",
+      },
+      output_spec: {
+        default_artifact: "## Required output\n\n- `review.md`",
+      },
+      required_skills: ["skill-review"],
+      gate: {
+        type: "hybrid",
+        decider_type: "agent",
+        decider: "agent-reviewer",
+        require_human: true,
+        human_decider: "owner-1",
+      },
+    });
   });
 });

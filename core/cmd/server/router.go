@@ -1230,6 +1230,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 				r.Get("/", h.ListWorkflowInstances)
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/", h.GetWorkflowInstance)
+					r.Post("/archive", h.ArchiveWorkflowInstance)
 					r.Post("/transition", h.TransitionWorkflowInstance)
 					r.Get("/tasks", h.ListWorkflowTasks)
 					r.Put("/tasks/{taskId}", h.AttachWorkflowTask)

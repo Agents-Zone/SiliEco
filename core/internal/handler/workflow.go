@@ -38,7 +38,7 @@ type WorkflowStageInput struct {
 }
 
 type CreateWorkflowRequest struct {
-	ProjectID   string               `json:"project_id"`
+	ProjectID   *string              `json:"project_id"`
 	Name        string               `json:"name"`
 	Description *string              `json:"description"`
 	Publish     bool                 `json:"publish"`
@@ -130,6 +130,9 @@ type WorkflowInstanceResponse struct {
 	CreatedBy         string                         `json:"created_by"`
 	StartedAt         *string                        `json:"started_at"`
 	CompletedAt       *string                        `json:"completed_at"`
+	TaskCount         int64                          `json:"task_count"`
+	ArchivedAt        *string                        `json:"archived_at"`
+	ArchivedBy        *string                        `json:"archived_by"`
 	CreatedAt         string                         `json:"created_at"`
 	UpdatedAt         string                         `json:"updated_at"`
 	Stages            []WorkflowStageResponse        `json:"stages,omitempty"`
@@ -219,6 +222,8 @@ func workflowInstanceToResponse(row db.WorkflowInstance) WorkflowInstanceRespons
 		CreatedBy:         uuidToString(row.CreatedBy),
 		StartedAt:         timestampToPtr(row.StartedAt),
 		CompletedAt:       timestampToPtr(row.CompletedAt),
+		ArchivedAt:        timestampToPtr(row.ArchivedAt),
+		ArchivedBy:        uuidToPtr(row.ArchivedBy),
 		CreatedAt:         timestampToString(row.CreatedAt),
 		UpdatedAt:         timestampToString(row.UpdatedAt),
 	}
@@ -495,15 +500,18 @@ func (h *Handler) CreateWorkflow(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
-	projectID, ok := parseUUIDOrBadRequest(w, strings.TrimSpace(req.ProjectID), "project_id")
-	if !ok {
-		return
-	}
-	if _, err := h.Queries.GetProjectInWorkspace(r.Context(), db.GetProjectInWorkspaceParams{
-		ID: projectID, WorkspaceID: wsUUID,
-	}); err != nil {
-		writeError(w, http.StatusBadRequest, "project not found")
-		return
+	var projectID pgtype.UUID
+	if req.ProjectID != nil && strings.TrimSpace(*req.ProjectID) != "" {
+		projectID, ok = parseUUIDOrBadRequest(w, strings.TrimSpace(*req.ProjectID), "project_id")
+		if !ok {
+			return
+		}
+		if _, err := h.Queries.GetProjectInWorkspace(r.Context(), db.GetProjectInWorkspaceParams{
+			ID: projectID, WorkspaceID: wsUUID,
+		}); err != nil {
+			writeError(w, http.StatusBadRequest, "project not found")
+			return
+		}
 	}
 	stages, err := normalizeWorkflowStages(req.Stages)
 	if err != nil {
@@ -890,6 +898,14 @@ func (h *Handler) ListWorkflowInstances(w http.ResponseWriter, r *http.Request) 
 	resp := make([]WorkflowInstanceResponse, len(rows))
 	for i, row := range rows {
 		resp[i] = workflowInstanceToResponse(row)
+		count, countErr := h.Queries.CountIssuesInWorkflowInstance(r.Context(), db.CountIssuesInWorkflowInstanceParams{
+			WorkspaceID: wsUUID, WorkflowInstanceID: row.ID,
+		})
+		if countErr != nil {
+			writeError(w, http.StatusInternalServerError, "failed to count workflow tasks")
+			return
+		}
+		resp[i].TaskCount = count
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"instances": resp, "total": len(resp)})
 }
@@ -920,14 +936,33 @@ func (h *Handler) CreateWorkflowInstance(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusNotFound, "workflow not found")
 		return
 	}
-	if !workflow.ProjectID.Valid {
-		writeError(w, http.StatusConflict, "workflow must be assigned to a project before creating a run")
-		return
+	projectID := workflow.ProjectID
+	if workflow.ProjectID.Valid {
+		if req.ProjectID != nil && strings.TrimSpace(*req.ProjectID) != "" {
+			requestProjectID, parsed := parseUUIDOrBadRequest(w, *req.ProjectID, "project_id")
+			if !parsed {
+				return
+			}
+			if requestProjectID != workflow.ProjectID {
+				writeError(w, http.StatusBadRequest, "project_id must match the workflow project")
+				return
+			}
+		}
+	} else {
+		if req.ProjectID == nil || strings.TrimSpace(*req.ProjectID) == "" {
+			writeError(w, http.StatusBadRequest, "project_id is required when starting a Space SOP")
+			return
+		}
+		var parsed bool
+		projectID, parsed = parseUUIDOrBadRequest(w, strings.TrimSpace(*req.ProjectID), "project_id")
+		if !parsed {
+			return
+		}
 	}
 	if _, err := h.Queries.GetProjectInWorkspace(r.Context(), db.GetProjectInWorkspaceParams{
-		ID: workflow.ProjectID, WorkspaceID: wsUUID,
+		ID: projectID, WorkspaceID: wsUUID,
 	}); err != nil {
-		writeError(w, http.StatusConflict, "workflow project no longer exists")
+		writeError(w, http.StatusBadRequest, "project not found")
 		return
 	}
 	versionID := workflow.CurrentVersionID
@@ -964,18 +999,6 @@ func (h *Handler) CreateWorkflowInstance(w http.ResponseWriter, r *http.Request)
 	if start {
 		status = "active"
 		currentStageID = first.ID
-	}
-	projectID := workflow.ProjectID
-	if req.ProjectID != nil && strings.TrimSpace(*req.ProjectID) != "" {
-		requestProjectID, parsed := parseUUIDOrBadRequest(w, *req.ProjectID, "project_id")
-		ok = parsed
-		if !ok {
-			return
-		}
-		if requestProjectID != workflow.ProjectID {
-			writeError(w, http.StatusBadRequest, "project_id must match the workflow project")
-			return
-		}
 	}
 	userUUID, err := util.ParseUUID(userID)
 	if err != nil {
@@ -1037,6 +1060,7 @@ func (h *Handler) GetWorkflowInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp.Tasks = make([]IssueResponse, len(tasks))
+	resp.TaskCount = int64(len(tasks))
 	for i, task := range tasks {
 		resp.Tasks[i] = issueToResponse(task, workspace.IssuePrefix)
 	}
@@ -1054,14 +1078,44 @@ func (h *Handler) GetWorkflowInstance(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func workflowGateType(raw []byte) string {
-	var gate struct {
-		Type string `json:"type"`
-	}
+type workflowGateConfig struct {
+	Type         string `json:"type"`
+	DeciderType  string `json:"decider_type"`
+	Decider      string `json:"decider"`
+	RequireHuman bool   `json:"require_human"`
+	HumanDecider string `json:"human_decider"`
+}
+
+func parseWorkflowGate(raw []byte) workflowGateConfig {
+	var gate workflowGateConfig
 	if json.Unmarshal(raw, &gate) != nil || gate.Type == "" {
-		return "none"
+		gate.Type = "none"
 	}
-	return gate.Type
+	return gate
+}
+
+func validateWorkflowGateActor(gate workflowGateConfig, actorType, actorID string) error {
+	switch gate.Type {
+	case "human", "hybrid":
+		if actorType != "member" {
+			return errors.New("this stage requires a human decision")
+		}
+		expected := gate.HumanDecider
+		if expected == "" && gate.Type == "human" {
+			expected = gate.Decider
+		}
+		if expected != "" && expected != actorID {
+			return errors.New("only the configured human decider can review this stage")
+		}
+	case "agent":
+		if actorType != "agent" {
+			return errors.New("this stage requires an agent decision")
+		}
+		if gate.Decider != "" && gate.Decider != "@self" && gate.Decider != actorID {
+			return errors.New("only the configured agent can review this stage")
+		}
+	}
+	return nil
 }
 
 func (h *Handler) TransitionWorkflowInstance(w http.ResponseWriter, r *http.Request) {
@@ -1096,6 +1150,10 @@ func (h *Handler) TransitionWorkflowInstance(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusConflict, "workflow instance is not active")
 		return
 	}
+	if instance.ArchivedAt.Valid {
+		writeError(w, http.StatusConflict, "archived workflow instances cannot be transitioned")
+		return
+	}
 	if !instance.CurrentStageID.Valid {
 		writeError(w, http.StatusConflict, "workflow instance has no current stage")
 		return
@@ -1119,13 +1177,9 @@ func (h *Handler) TransitionWorkflowInstance(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	actorType, actorID := h.resolveActor(r, userID, workspaceID)
-	gateType := workflowGateType(current.Gate)
-	if (gateType == "human" || gateType == "hybrid") && actorType != "member" {
-		writeError(w, http.StatusForbidden, "this stage requires a human decision")
-		return
-	}
-	if gateType == "agent" && actorType != "agent" {
-		writeError(w, http.StatusForbidden, "this stage requires an agent decision")
+	gate := parseWorkflowGate(current.Gate)
+	if err := validateWorkflowGateActor(gate, actorType, actorID); err != nil {
+		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
 	actorUUID, err := util.ParseUUID(actorID)
@@ -1184,7 +1238,7 @@ func (h *Handler) TransitionWorkflowInstance(w http.ResponseWriter, r *http.Requ
 	}
 	defer tx.Rollback(r.Context())
 	qtx := h.Queries.WithTx(tx)
-	if gateType != "none" || req.Outcome == "rejected" || req.Note != nil {
+	if gate.Type != "none" || req.Outcome == "rejected" || req.Note != nil {
 		if _, err := qtx.CreateWorkflowGateDecision(r.Context(), db.CreateWorkflowGateDecisionParams{
 			WorkspaceID: wsUUID, WorkflowInstanceID: instanceID, FromStageID: current.ID,
 			ToStageID: targetID, Outcome: req.Outcome, ActorType: actorType,
@@ -1218,6 +1272,55 @@ func (h *Handler) TransitionWorkflowInstance(w http.ResponseWriter, r *http.Requ
 	}
 	resp := workflowInstanceToResponse(updated)
 	h.publish(protocol.EventWorkflowInstanceUpdated, workspaceID, actorType, actorID, map[string]any{"instance": resp})
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *Handler) ArchiveWorkflowInstance(w http.ResponseWriter, r *http.Request) {
+	workspaceID, userID, wsUUID, ok := h.requireWorkflowMember(w, r)
+	if !ok {
+		return
+	}
+	instanceID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "id"), "workflow instance id")
+	if !ok {
+		return
+	}
+	instance, err := h.Queries.GetWorkflowInstanceInWorkspace(r.Context(), db.GetWorkflowInstanceInWorkspaceParams{
+		ID: instanceID, WorkspaceID: wsUUID,
+	})
+	if err != nil {
+		writeError(w, http.StatusNotFound, "workflow instance not found")
+		return
+	}
+	if instance.ArchivedAt.Valid {
+		writeError(w, http.StatusConflict, "workflow instance is already archived")
+		return
+	}
+	taskCount, err := h.Queries.CountIssuesInWorkflowInstance(r.Context(), db.CountIssuesInWorkflowInstanceParams{
+		WorkspaceID: wsUUID, WorkflowInstanceID: instanceID,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to count workflow tasks")
+		return
+	}
+	if taskCount > 0 {
+		writeError(w, http.StatusConflict, "workflow instances with tasks cannot be archived")
+		return
+	}
+	archivedBy, err := util.ParseUUID(userID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+	archived, err := h.Queries.ArchiveWorkflowInstance(r.Context(), db.ArchiveWorkflowInstanceParams{
+		ID: instanceID, WorkspaceID: wsUUID, ArchivedBy: archivedBy,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to archive workflow instance")
+		return
+	}
+	resp := workflowInstanceToResponse(archived)
+	resp.TaskCount = taskCount
+	h.publish(protocol.EventWorkflowInstanceUpdated, workspaceID, "member", userID, map[string]any{"instance": resp})
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -1286,6 +1389,10 @@ func (h *Handler) AttachWorkflowTask(w http.ResponseWriter, r *http.Request) {
 	}
 	if instance.Status == "completed" || instance.Status == "cancelled" {
 		writeError(w, http.StatusConflict, "workflow instance is closed")
+		return
+	}
+	if instance.ArchivedAt.Valid {
+		writeError(w, http.StatusConflict, "archived workflow instances cannot accept tasks")
 		return
 	}
 	if !instance.ProjectID.Valid {

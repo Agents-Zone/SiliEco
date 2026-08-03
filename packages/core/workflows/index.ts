@@ -13,6 +13,7 @@ export {
   useCreateWorkflowVersion,
   usePublishWorkflowVersion,
   useCreateWorkflowInstance,
+  useArchiveWorkflowInstance,
   useTransitionWorkflowInstance,
   useAttachWorkflowTask,
   useDetachWorkflowTask,

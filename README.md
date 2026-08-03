@@ -47,7 +47,8 @@ Space
 ├── people, Agents, Swarms, Skills, chats and settings
 └── Project
     ├── Project Tasks
-    └── SOP / Workflow definition
+    ├── reusable Space SOP assets
+    └── SOP run or Project-specific SOP variant
         └── Workflow Run
             └── Stage
                 └── Task
@@ -65,8 +66,9 @@ either dimension.
 - Multiple isolated Spaces with members, roles, repositories, Agents, Skills,
   Tasks, chats, and settings.
 - Accordion navigation for Spaces and Projects in the Desktop App.
-- Multiple Projects per Space, each with its own Tasks, SOPs, automation,
-  Agents, people, and context.
+- Multiple Projects per Space, each with its own Tasks, SOP variants,
+  automation, Agents, people, and context. Reusable SOP definitions live at
+  Space level and can run directly inside any Project.
 - Project and Space Tasks can coexist; an SOP is optional.
 
 ### Task as the core work object
@@ -88,8 +90,9 @@ either dimension.
 
 ### SOP, Workflow, and Stage
 
-- Project-scoped reusable SOP definitions with draft, published, and archived
-  states.
+- Space-scoped reusable SOP definitions with draft, published, and archived
+  states. A Project can run the shared definition directly or inherit it into
+  an independently adjustable Project variant.
 - Immutable published versions and separately named Workflow Runs.
 - Ordered Stages with input/output descriptions, required Skills, allowed Task
   statuses, rollback targets, and human/Agent/hybrid gates.

@@ -65,6 +65,25 @@ func TestNormalizeWorkflowStagesValidatesRollbackAndGate(t *testing.T) {
 	}
 }
 
+func TestValidateWorkflowGateActorUsesConfiguredDecider(t *testing.T) {
+	gate := workflowGateConfig{
+		Type:         "human",
+		Decider:      "member-1",
+		HumanDecider: "member-1",
+	}
+	if err := validateWorkflowGateActor(gate, "member", "member-1"); err != nil {
+		t.Fatalf("configured member should be allowed: %v", err)
+	}
+	if err := validateWorkflowGateActor(gate, "member", "member-2"); err == nil {
+		t.Fatal("a different member must not be allowed through a specific human gate")
+	}
+	if err := validateWorkflowGateActor(workflowGateConfig{
+		Type: "agent", Decider: "agent-1",
+	}, "agent", "agent-2"); err == nil {
+		t.Fatal("a different agent must not be allowed through a specific agent gate")
+	}
+}
+
 func TestWorkflowLifecycleKeepsTaskStatusAndStageIndependent(t *testing.T) {
 	if testHandler == nil || testPool == nil {
 		t.Skip("database not available")
@@ -170,6 +189,37 @@ func TestWorkflowLifecycleKeepsTaskStatusAndStageIndependent(t *testing.T) {
 		t.Fatalf("run must inherit the SOP project: %#v", instance)
 	}
 
+	emptyRunRecorder := httptest.NewRecorder()
+	testHandler.CreateWorkflowInstance(
+		emptyRunRecorder,
+		workflowRequest(http.MethodPost, "/api/workflows/"+workflow.ID+"/instances", map[string]any{
+			"title": "Unused release run",
+			"start": true,
+		}, map[string]string{"id": workflow.ID}),
+	)
+	if emptyRunRecorder.Code != http.StatusCreated {
+		t.Fatalf("create empty run: status=%d body=%s", emptyRunRecorder.Code, emptyRunRecorder.Body.String())
+	}
+	var emptyRun WorkflowInstanceResponse
+	if err := json.Unmarshal(emptyRunRecorder.Body.Bytes(), &emptyRun); err != nil {
+		t.Fatalf("decode empty run: %v", err)
+	}
+	archiveEmpty := httptest.NewRecorder()
+	testHandler.ArchiveWorkflowInstance(
+		archiveEmpty,
+		workflowRequest(http.MethodPost, "/api/workflow-instances/"+emptyRun.ID+"/archive", nil, map[string]string{"id": emptyRun.ID}),
+	)
+	if archiveEmpty.Code != http.StatusOK {
+		t.Fatalf("archive empty run: status=%d body=%s", archiveEmpty.Code, archiveEmpty.Body.String())
+	}
+	var archivedRun WorkflowInstanceResponse
+	if err := json.Unmarshal(archiveEmpty.Body.Bytes(), &archivedRun); err != nil {
+		t.Fatalf("decode archived run: %v", err)
+	}
+	if archivedRun.ArchivedAt == nil || archivedRun.ArchivedBy == nil || archivedRun.TaskCount != 0 {
+		t.Fatalf("archive audit fields missing: %#v", archivedRun)
+	}
+
 	attach := httptest.NewRecorder()
 	testHandler.AttachWorkflowTask(
 		attach,
@@ -180,12 +230,44 @@ func TestWorkflowLifecycleKeepsTaskStatusAndStageIndependent(t *testing.T) {
 	if attach.Code != http.StatusOK {
 		t.Fatalf("attach task: status=%d body=%s", attach.Code, attach.Body.String())
 	}
+	archiveWithTask := httptest.NewRecorder()
+	testHandler.ArchiveWorkflowInstance(
+		archiveWithTask,
+		workflowRequest(http.MethodPost, "/api/workflow-instances/"+instance.ID+"/archive", nil, map[string]string{"id": instance.ID}),
+	)
+	if archiveWithTask.Code != http.StatusConflict {
+		t.Fatalf("run with Task must not be archived, got %d: %s", archiveWithTask.Code, archiveWithTask.Body.String())
+	}
 	var attached IssueResponse
 	if err := json.Unmarshal(attach.Body.Bytes(), &attached); err != nil {
 		t.Fatalf("decode attached task: %v", err)
 	}
 	if attached.ProjectID == nil || *attached.ProjectID != projectID {
 		t.Fatalf("Space-level Task must inherit the run project when attached: %#v", attached)
+	}
+	listRuns := httptest.NewRecorder()
+	testHandler.ListWorkflowInstances(
+		listRuns,
+		newRequest(http.MethodGet, "/api/workflow-instances?project_id="+projectID, nil),
+	)
+	if listRuns.Code != http.StatusOK {
+		t.Fatalf("list workflow runs: status=%d body=%s", listRuns.Code, listRuns.Body.String())
+	}
+	var listed struct {
+		Instances []WorkflowInstanceResponse `json:"instances"`
+	}
+	if err := json.Unmarshal(listRuns.Body.Bytes(), &listed); err != nil {
+		t.Fatalf("decode workflow run list: %v", err)
+	}
+	listedTaskCount := int64(-1)
+	for _, listedRun := range listed.Instances {
+		if listedRun.ID == instance.ID {
+			listedTaskCount = listedRun.TaskCount
+			break
+		}
+	}
+	if listedTaskCount != 1 {
+		t.Fatalf("workflow run list must report one linked Task, got %d: %s", listedTaskCount, listRuns.Body.String())
 	}
 
 	blocked := httptest.NewRecorder()
@@ -259,6 +341,107 @@ func TestWorkflowLifecycleKeepsTaskStatusAndStageIndependent(t *testing.T) {
 	}
 	if decisionCount != 1 {
 		t.Fatalf("expected one human gate decision, got %d", decisionCount)
+	}
+}
+
+func TestSpaceWorkflowCanRunInsideAProject(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	cleanupWorkflowTestData(t)
+
+	var projectID string
+	if err := testPool.QueryRow(context.Background(), `
+		INSERT INTO project (workspace_id, title)
+		VALUES ($1, 'Space SOP target')
+		RETURNING id
+	`, testWorkspaceID).Scan(&projectID); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	t.Cleanup(func() {
+		testPool.Exec(context.Background(), `DELETE FROM project WHERE id = $1`, projectID)
+	})
+
+	create := httptest.NewRecorder()
+	testHandler.CreateWorkflow(create, newRequest(http.MethodPost, "/api/workflows", map[string]any{
+		"name":    "Space release SOP",
+		"publish": true,
+		"stages": []map[string]any{
+			{
+				"name": "Delivery",
+				"completion_rule": map[string]any{
+					"type":            "all_tasks_terminal",
+					"evaluation_mode": "on_task_change",
+				},
+			},
+		},
+	}))
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create Space workflow: status=%d body=%s", create.Code, create.Body.String())
+	}
+	var workflow WorkflowResponse
+	if err := json.Unmarshal(create.Body.Bytes(), &workflow); err != nil {
+		t.Fatalf("decode Space workflow: %v", err)
+	}
+	if workflow.ProjectID != nil {
+		t.Fatalf("Space workflow must not be pinned to a project: %#v", workflow)
+	}
+
+	missingProject := httptest.NewRecorder()
+	testHandler.CreateWorkflowInstance(
+		missingProject,
+		workflowRequest(http.MethodPost, "/api/workflows/"+workflow.ID+"/instances", map[string]any{
+			"title": "Missing target",
+			"start": true,
+		}, map[string]string{"id": workflow.ID}),
+	)
+	if missingProject.Code != http.StatusBadRequest {
+		t.Fatalf("expected Space workflow run without project to fail, got %d: %s", missingProject.Code, missingProject.Body.String())
+	}
+
+	createRun := httptest.NewRecorder()
+	testHandler.CreateWorkflowInstance(
+		createRun,
+		workflowRequest(http.MethodPost, "/api/workflows/"+workflow.ID+"/instances", map[string]any{
+			"title":      "Project delivery",
+			"project_id": projectID,
+			"start":      true,
+		}, map[string]string{"id": workflow.ID}),
+	)
+	if createRun.Code != http.StatusCreated {
+		t.Fatalf("start Space workflow in project: status=%d body=%s", createRun.Code, createRun.Body.String())
+	}
+	var run WorkflowInstanceResponse
+	if err := json.Unmarshal(createRun.Body.Bytes(), &run); err != nil {
+		t.Fatalf("decode workflow run: %v", err)
+	}
+	if run.ProjectID == nil || *run.ProjectID != projectID {
+		t.Fatalf("Space workflow run must bind to the selected project: %#v", run)
+	}
+
+	list := httptest.NewRecorder()
+	testHandler.ListWorkflows(
+		list,
+		newRequest(http.MethodGet, "/api/workflows?project_id="+projectID, nil),
+	)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list project workflows: status=%d body=%s", list.Code, list.Body.String())
+	}
+	var payload struct {
+		Workflows []WorkflowResponse `json:"workflows"`
+	}
+	if err := json.Unmarshal(list.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode workflow list: %v", err)
+	}
+	found := false
+	for _, item := range payload.Workflows {
+		if item.ID == workflow.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("Project workflow list must include reusable Space SOPs")
 	}
 }
 

@@ -53,7 +53,10 @@ export function WorkflowAssignmentPicker({
   const assignableRuns = useMemo(
     () =>
       projectRuns.filter(
-        (run) => run.status !== "completed" && run.status !== "cancelled",
+        (run) =>
+          !run.archived_at &&
+          run.status !== "completed" &&
+          run.status !== "cancelled",
       ),
     [projectRuns],
   );

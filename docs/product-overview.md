@@ -27,16 +27,17 @@ Space
 ├── Direct Task
 └── Project
     ├── Project Task（可不进入 SOP）
-    └── SOP / Workflow Definition
-        └── Workflow Run
-            └── Stage
+    ├── Space SOP / Workflow Definition
+    └── Project SOP Variant or Workflow Run
+        └── Stage
                 └── Task
 ```
 
 这些关系的产品约束如下：
 
 - 一个用户可以进入多个 Space；一个 Space 可以包含多个 Project。
-- 一个 Project 可以包含多个 SOP。
+- SOP 是 Space 级可复用资产；一个 Project 可以直接运行多个 Space SOP。
+- Project 可以继承 Space SOP 的已发布版本，并形成独立调整的 Project 变体。
 - 一个已发布 SOP 可以启动多个 Workflow Run，每次运行有独立名称。
 - 一个 Workflow Run 按发布版本包含多个有序 Stage。
 - 一个 Stage 可以关联多个 Task。
@@ -154,8 +155,9 @@ Task 生命周期；只有交付过程需要复用、审计或门禁时，才创
 
 ### SOP 定义
 
-SOP 当前属于 Project。创建页面只负责流程设计，不把 Task 管理重复塞进 SOP 编辑器。
-用户可以从模板开始，也可以创建空白 SOP。
+SOP 默认属于 Space，是多个 Project 可以复用的流程资产。Project 可以直接启动 Space
+SOP，也可以从已发布版本继承并创建 Project 专属变体。创建与详情页面只负责流程设计，
+不把 Task 管理重复塞进 SOP 编辑器。用户可以从模板开始，也可以创建空白 SOP。
 
 内置模板包括：
 
