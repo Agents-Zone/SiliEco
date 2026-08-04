@@ -108,6 +108,7 @@ import { ProgressRing } from "./progress-ring";
 import { matchesPinyin } from "../../editor/extensions/pinyin-match";
 import { useT } from "../../i18n";
 import { useIssueDetailScrollRestore } from "../hooks/use-issue-detail-scroll-restore";
+import { useIssueResourceReference } from "../hooks/use-issue-resource-reference";
 import { useInPageFind } from "../hooks/use-in-page-find";
 import { FindBar } from "./find-bar";
 import {
@@ -909,6 +910,7 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
   const backOrReplace = useBackOrReplace();
   const user = useAuthStore((s) => s.user);
   const paths = useWorkspacePaths();
+  const referenceFileFromDescription = useIssueResourceReference(id);
 
   // Issue navigation — read from TQ list cache
   const wsId = useWorkspaceId();
@@ -2448,6 +2450,9 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
               flushPendingOnUnmount
               currentIssueId={id}
               attachments={descEditorAttachments}
+              enableResourceMentions
+              onReferenceFile={referenceFileFromDescription}
+              className="resource-inline-content"
             />
 
             <div className="flex items-center gap-1 mt-3">

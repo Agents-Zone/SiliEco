@@ -20,6 +20,7 @@ import type { NodeViewProps } from "@tiptap/react";
 import { FILE_CARD_URL_PATTERN } from "@silieco/ui/markdown";
 import { escapeMarkdownLabel } from "../utils/escape-markdown-label";
 import { Attachment } from "../attachment";
+import { getPreviewKind } from "../utils/preview";
 
 // Backslash is excluded from the label char class so "\x" runs can only be
 // consumed by \\. — overlapping alternatives backtrack in 2^n ways (ReDoS,
@@ -38,9 +39,15 @@ export function FileCardView({ node, editor, deleteNode }: NodeViewProps) {
   const filename = (node.attrs.filename as string) || "";
   const uploading = node.attrs.uploading as boolean;
   const editable = editor?.isEditable ?? false;
+  const previewKind = getPreviewKind("", filename);
 
   return (
-    <NodeViewWrapper as="div" className="file-card-node" data-type="fileCard">
+    <NodeViewWrapper
+      as="div"
+      className="file-card-node"
+      data-type="fileCard"
+      data-preview-kind={previewKind || undefined}
+    >
       <div contentEditable={false}>
         <Attachment
           attachment={{ kind: "url", url: href, filename, uploading }}

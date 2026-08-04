@@ -33,3 +33,4 @@ export { AttachmentCard } from "./attachment-card";
 export type { AttachmentCardProps } from "./attachment-card";
 export { Attachment } from "./attachment";
 export type { AttachmentInput, AttachmentProps } from "./attachment";
+export { InlineHtmlPreviewPage } from "./inline-html-preview-page";

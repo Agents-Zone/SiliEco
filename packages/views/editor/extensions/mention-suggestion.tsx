@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type RefObject,
   type ReactNode,
 } from "react";
 import type { QueryClient } from "@tanstack/react-query";
@@ -24,8 +25,9 @@ import type {
   MemberWithUser,
   Agent,
   Squad,
+  FileResource,
 } from "@silieco/core/types";
-import { ListTodo } from "lucide-react";
+import { FileImage, FileText, ListTodo } from "lucide-react";
 import { ActorAvatar } from "../../common/actor-avatar";
 import { StatusIcon } from "../../issues/components/status-icon";
 import { ProjectIcon } from "../../projects/components/project-icon";
@@ -52,7 +54,7 @@ import { isTriggerArmedAt } from "./suggestion-trigger-arming";
 export interface MentionItem {
   id: string;
   label: string;
-  type: "member" | "agent" | "squad" | "issue" | "project" | "all";
+  type: "member" | "agent" | "squad" | "issue" | "project" | "file" | "all";
   /** Optional grouping hint for injected context items. */
   group?: "current" | "recent" | "search";
   /** Secondary text shown beside the label (e.g. issue title) */
@@ -63,6 +65,7 @@ export interface MentionItem {
   icon?: string | null;
   /** Project status snapshot for recent/current project rendering */
   projectStatus?: ProjectStatus;
+  file?: FileResource;
 }
 
 interface MentionListProps {
@@ -70,6 +73,8 @@ interface MentionListProps {
   query: string;
   command: (item: MentionItem) => void;
   includeProjectSearch?: boolean;
+  includeResources?: boolean;
+  onSelectResource?: (item: MentionItem) => void;
 }
 
 export interface MentionListRef {
@@ -91,6 +96,7 @@ function groupItems(items: MentionItem[]): MentionGroup[] {
   const search: MentionItem[] = [];
   const users: MentionItem[] = [];
   const issues: MentionItem[] = [];
+  const resources: MentionItem[] = [];
 
   for (const item of items) {
     if (item.group === "current") {
@@ -99,6 +105,8 @@ function groupItems(items: MentionItem[]): MentionGroup[] {
       recent.push(item);
     } else if (item.group === "search") {
       search.push(item);
+    } else if (item.type === "file") {
+      resources.push(item);
     } else if (item.type === "issue" || item.type === "project") {
       issues.push(item);
     } else {
@@ -112,6 +120,7 @@ function groupItems(items: MentionItem[]): MentionGroup[] {
   if (search.length > 0) groups.push({ label: "Search", items: search });
   if (users.length > 0) groups.push({ label: "Users", items: users });
   if (issues.length > 0) groups.push({ label: "Issues", items: issues });
+  if (resources.length > 0) groups.push({ label: "Resources", items: resources });
   return groups;
 }
 
@@ -145,7 +154,14 @@ function mergeMentionItems(
 }
 
 export const MentionList = forwardRef<MentionListRef, MentionListProps>(
-  function MentionList({ items, query, command, includeProjectSearch = false }, ref) {
+  function MentionList({
+    items,
+    query,
+    command,
+    includeProjectSearch = false,
+    includeResources = false,
+    onSelectResource,
+  }, ref) {
     const { t } = useT("editor");
     // Selection is tracked by item identity, NOT by a positional index. The
     // list is re-bucketed by groupItems() and grows asynchronously (server
@@ -158,8 +174,33 @@ export const MentionList = forwardRef<MentionListRef, MentionListProps>(
     const [serverItems, setServerItems] = useState<MentionItem[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [searchedQuery, setSearchedQuery] = useState("");
+    const [resourceItems, setResourceItems] = useState<MentionItem[]>([]);
+    const [isLoadingResources, setIsLoadingResources] = useState(false);
     const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
     const normalizedQuery = query.trim();
+
+    useEffect(() => {
+      if (!includeResources) {
+        setResourceItems([]);
+        setIsLoadingResources(false);
+        return;
+      }
+      let cancelled = false;
+      setIsLoadingResources(true);
+      void api.listFileResources({ limit: 100 })
+        .then((response) => {
+          if (!cancelled) setResourceItems(response.files.map(fileToMention));
+        })
+        .catch(() => {
+          if (!cancelled) setResourceItems([]);
+        })
+        .finally(() => {
+          if (!cancelled) setIsLoadingResources(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [includeResources]);
 
     useEffect(() => {
       const q = normalizedQuery;
@@ -237,8 +278,12 @@ export const MentionList = forwardRef<MentionListRef, MentionListProps>(
 
     const displayItems = useMemo(() => {
       const currentServerItems = searchedQuery === normalizedQuery ? serverItems : [];
-      return mergeMentionItems(items, currentServerItems).slice(0, MAX_ITEMS);
-    }, [items, normalizedQuery, searchedQuery, serverItems]);
+      const regularItems = mergeMentionItems(items, currentServerItems).slice(0, MAX_ITEMS);
+      const matchingResources = resourceItems
+        .filter((item) => matchesMentionQuery(item, normalizedQuery))
+        .slice(0, 8);
+      return mergeMentionItems(regularItems, matchingResources);
+    }, [items, normalizedQuery, resourceItems, searchedQuery, serverItems]);
 
     // The single index space for selection. groupItems() re-buckets displayItems
     // (current → recent → search → users → issues); orderedItems is exactly what
@@ -267,9 +312,10 @@ export const MentionList = forwardRef<MentionListRef, MentionListProps>(
         if (!item) return;
         const wsId = getCurrentWsId();
         if (wsId) recordMentionUsage(wsId, item);
-        command(item);
+        if (item.type === "file" && onSelectResource) onSelectResource(item);
+        else command(item);
       },
-      [command],
+      [command, onSelectResource],
     );
 
     useImperativeHandle(ref, () => ({
@@ -303,7 +349,7 @@ export const MentionList = forwardRef<MentionListRef, MentionListProps>(
     if (orderedItems.length === 0) {
       const isWaitingForServer =
         normalizedQuery !== "" &&
-        (isSearching || searchedQuery !== normalizedQuery);
+        (isSearching || searchedQuery !== normalizedQuery || isLoadingResources);
 
       return (
         <div className="rounded-md border bg-popover p-2 text-caption text-muted-foreground shadow-md">
@@ -322,6 +368,7 @@ export const MentionList = forwardRef<MentionListRef, MentionListProps>(
       if (label === "Search") return t(($) => $.mention.group_search);
       if (label === "Users") return t(($) => $.mention.group_users);
       if (label === "Issues") return t(($) => $.mention.group_issues);
+      if (label === "Resources") return t(($) => $.mention.group_resources);
       return label;
     };
 
@@ -458,6 +505,43 @@ function MentionRow({
     );
   }
 
+  if (item.type === "file" && item.file) {
+    const file = item.file;
+    const isImage = file.content_type.startsWith("image/");
+    const thumbnailURL = file.url || file.download_url;
+    return (
+      <button
+        type="button"
+        ref={buttonRef}
+        className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-caption transition-colors ${
+          selected ? "bg-accent" : "hover:bg-accent/50"
+        }`}
+        onClick={onSelect}
+      >
+        <span className="relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted">
+          {isImage
+            ? <FileImage className="size-4 text-muted-foreground" />
+            : <FileText className="size-4 text-muted-foreground" />}
+          {isImage && thumbnailURL && (
+            <img
+              src={thumbnailURL}
+              alt=""
+              className="absolute inset-0 size-full object-contain object-center p-0.5"
+              loading="lazy"
+              onError={(event) => { event.currentTarget.hidden = true; }}
+            />
+          )}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-medium text-foreground">{file.filename}</span>
+          <span className="block truncate text-muted-foreground">
+            {item.description || file.content_type}
+          </span>
+        </span>
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -515,6 +599,16 @@ function projectToMention(p: { id: string; title: string; description?: string |
   };
 }
 
+function fileToMention(file: FileResource): MentionItem {
+  return {
+    id: file.id,
+    label: file.filename,
+    type: "file",
+    description: [file.source_project_title, file.source_issue_title].filter(Boolean).join(" · "),
+    file,
+  };
+}
+
 function matchesMentionQuery(item: MentionItem, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -529,6 +623,8 @@ function matchesMentionQuery(item: MentionItem, query: string): boolean {
 interface MentionSuggestionOptions {
   mode?: "default" | "context";
   getContextItems?: () => MentionItem[];
+  includeResources?: boolean;
+  onReferenceFileRef?: RefObject<((file: FileResource) => void) | undefined>;
 }
 
 export function createMentionSuggestion(
@@ -640,6 +736,17 @@ export function createMentionSuggestion(
         query: props.query,
         command: props.command,
         includeProjectSearch: options.mode === "context",
+        includeResources: options.includeResources,
+        onSelectResource: (item) => {
+          const file = item.file;
+          if (!file) return;
+          const href = file.markdown_url || file.download_url || file.url;
+          const node = file.content_type.startsWith("image/")
+            ? { type: "image", attrs: { src: href, alt: file.filename } }
+            : { type: "fileCard", attrs: { href, filename: file.filename } };
+          props.editor.chain().focus().deleteRange(props.range).insertContent(node).run();
+          options.onReferenceFileRef?.current?.(file);
+        },
       }),
       onKeyDown: (ref, props) => ref?.onKeyDown(props) ?? false,
     }),

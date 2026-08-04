@@ -14,6 +14,7 @@ import { useT } from "../../i18n";
 import { CommentTriggerChips } from "./comment-trigger-chips";
 import { useCommentTriggerPreview } from "../hooks/use-comment-trigger-preview";
 import { useCommentUploads } from "./use-comment-uploads";
+import { useIssueResourceReference } from "../hooks/use-issue-resource-reference";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -67,6 +68,7 @@ function ReplyInput({
   const [isEmpty, setIsEmpty] = useState(!initialDraft?.trim());
   const [suppressedAgentIds, setSuppressedAgentIds] = useState<Set<string>>(() => new Set());
   const triggerPreview = useCommentTriggerPreview({ issueId, parentId, content });
+  const referenceFileFromMention = useIssueResourceReference(issueId);
   // Uploads for this reply session (SILI-5181) — owned by the coordinator. With
   // a draftKey they persist in the draft store so scroll-out/close no longer
   // drops an in-flight upload; without one (no persistence context) they fall
@@ -212,7 +214,7 @@ function ReplyInput({
         {...dropZoneProps}
         ref={composerRef}
         className={cn(
-          "relative min-w-0 flex-1 flex flex-col",
+          "comment-composer relative min-w-0 flex-1 flex flex-col",
           !isEmpty && "pb-9",
         )}
       >
@@ -244,6 +246,8 @@ function ReplyInput({
             debounceMs={100}
             currentIssueId={issueId}
             attachments={pendingAttachments}
+            enableResourceMentions
+            onReferenceFile={referenceFileFromMention}
             enableSlashCommands
             slashCommandMode="command"
           />

@@ -127,6 +127,30 @@ describe("HtmlAttachmentPreview — visual shell (does not use file-card chrome)
 });
 
 describe("HtmlAttachmentPreview — toolbar actions", () => {
+  it("keeps the three primary actions visible in a floating top-right toolbar", async () => {
+    getAttachmentTextContentMock.mockResolvedValueOnce({
+      text: "<p>ok</p>",
+      originalContentType: "text/html",
+    });
+    renderWithQuery(
+      <HtmlAttachmentPreview
+        attachmentId="att-1"
+        filename="report.html"
+        onPreview={() => {}}
+        onDownload={() => {}}
+      />,
+    );
+
+    const toolbar = await screen.findByTestId("html-attachment-preview-actions");
+    expect(toolbar.className).toContain("absolute");
+    expect(toolbar.className).toContain("right-2");
+    expect(toolbar.className).toContain("top-2");
+    expect(toolbar.className).not.toContain("opacity-0");
+    expect(screen.getByTitle("Preview")).toBeTruthy();
+    expect(screen.getByTitle("Open in new tab")).toBeTruthy();
+    expect(screen.getByTitle("Download")).toBeTruthy();
+  });
+
   it("invokes onPreview when Maximize is clicked", async () => {
     getAttachmentTextContentMock.mockResolvedValueOnce({
       text: "<p>ok</p>",

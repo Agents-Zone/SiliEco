@@ -121,6 +121,11 @@ describe("FileCardView — HTML attachment routes through AttachmentBlock to ifr
     });
     expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
     expect(frame.getAttribute("srcdoc")).toContain("<p>chart</p>");
+    expect(frame.closest('[data-preview-kind="html"]')).not.toBeNull();
+    const actions = screen.getByTestId("html-attachment-preview-actions");
+    expect(actions.querySelector(".lucide-maximize-2")).not.toBeNull();
+    expect(actions.querySelector(".lucide-external-link")).not.toBeNull();
+    expect(actions.querySelector(".lucide-download")).not.toBeNull();
     // The AttachmentCard chrome surfaces the filename as text inside its row.
     // HtmlAttachmentPreview replaces the chrome entirely, so the filename
     // must not appear as visible text.

@@ -613,6 +613,12 @@ describe("ReadonlyContent file-card → AttachmentBlock HTML routing", () => {
     });
     expect(frame.getAttribute("sandbox")).toBe("allow-scripts");
     expect(frame.getAttribute("srcdoc")).toContain("<p>chart</p>");
+    const actions = container.querySelector('[data-testid="html-attachment-preview-actions"]');
+    expect(actions).not.toBeNull();
+    expect(actions?.className).toContain("z-30");
+    expect(actions?.querySelector(".lucide-maximize-2")).not.toBeNull();
+    expect(actions?.querySelector(".lucide-external-link")).not.toBeNull();
+    expect(actions?.querySelector(".lucide-download")).not.toBeNull();
     // AttachmentCard chrome surfaces the filename as visible text in a
     // <p class="truncate"> row. HtmlAttachmentPreview replaces it entirely.
     expect(queryByText("report.html")).toBeNull();

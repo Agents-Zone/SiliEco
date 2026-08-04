@@ -17,6 +17,7 @@ import {
   RuntimeSettingsPage,
 } from "./pages/runtime-detail-page";
 import { AttachmentPreviewRoute } from "./pages/attachment-preview-page";
+import { InlineHtmlPreviewRoute } from "./pages/inline-html-preview-page";
 import { IssuesPage } from "@silieco/views/issues/components";
 import { ProjectsPage } from "@silieco/views/projects/components";
 import { WorkflowsPage } from "@silieco/views/workflows/components";
@@ -244,6 +245,11 @@ export const appRoutes: RouteObject[] = [
             path: "attachments/:id/preview",
             element: <AttachmentPreviewRoute />,
             handle: { title: "Attachment" },
+          },
+          {
+            path: "html-previews/:id",
+            element: <InlineHtmlPreviewRoute />,
+            handle: { title: "HTML Preview" },
           },
           {
             path: "usage",

@@ -72,3 +72,105 @@
 .image-toolbar button:hover {
   background: color-mix(in srgb, white 15%, transparent);
 }
+
+/* Resource references are supporting context, not document illustrations.
+ * Keep them as compact leading labels so surrounding text remains dominant;
+ * the full asset stays one click away in the shared preview modal. */
+.comment-content,
+.comment-composer .rich-text-editor,
+.resource-inline-content {
+  display: flow-root;
+}
+
+:where(.comment-content, .comment-composer, .resource-inline-content) .image-figure {
+  float: left;
+  width: 2.25rem;
+  height: 2.25rem;
+  margin: 0.125rem 0.5rem 0.25rem 0;
+  line-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--muted);
+}
+
+/* Keep this selector more specific than `.rich-text-editor img` in media.css.
+ * That generic editor rule adds vertical margins and restores `height: auto`,
+ * which pushes the bitmap toward the bottom of the compact thumbnail. */
+:is(.comment-content, .comment-composer, .resource-inline-content) .image-content {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  margin: 0;
+  object-fit: contain;
+  object-position: center;
+  padding: 0.125rem;
+  border-radius: inherit;
+}
+
+.comment-content .image-toolbar {
+  display: none;
+}
+
+:where(.comment-composer, .resource-inline-content) .image-toolbar {
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: inherit;
+}
+
+:where(.comment-composer, .resource-inline-content) .image-toolbar > button {
+  display: none;
+}
+
+:where(.comment-composer, .resource-inline-content) .image-toolbar > button:first-child {
+  display: flex;
+}
+
+:where(.comment-content, .comment-composer, .resource-inline-content) .attachment-card {
+  float: left;
+  width: auto;
+  max-width: min(14rem, 100%);
+  margin: 0.125rem 0.5rem 0.25rem 0;
+}
+
+/* fileCard is a block node in the editor schema. Float its NodeView wrapper,
+ * then let the visual card size itself inside; otherwise the invisible block
+ * wrapper still reserves a full line even though the card looks compact. */
+:where(.comment-composer, .resource-inline-content) .file-card-node {
+  float: left;
+  width: auto;
+  max-width: min(14rem, 100%);
+  margin: 0.125rem 0.5rem 0.25rem 0;
+}
+
+/* HTML attachments are live document previews, not compact file labels.
+ * Keep the NodeView full-width so its top-right action overlay remains inside
+ * the visible editor bounds instead of being squeezed by the resource pill. */
+:where(.comment-composer, .resource-inline-content) .file-card-node[data-preview-kind="html"] {
+  float: none;
+  width: 100%;
+  max-width: 100%;
+  margin: 0.5rem 0;
+}
+
+:where(.comment-composer, .resource-inline-content) .file-card-node .attachment-card {
+  float: none;
+  max-width: 100%;
+  margin: 0;
+}
+
+:where(.comment-content, .comment-composer, .resource-inline-content) .attachment-card-chrome {
+  min-height: 2.25rem;
+  border-radius: 9999px;
+}
+
+:where(.comment-content, .comment-composer, .resource-inline-content) .attachment-card-chrome[role="button"] {
+  cursor: pointer;
+}
+
+.comment-content .attachment-card-chrome > button {
+  display: none;
+}

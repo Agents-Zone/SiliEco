@@ -31,6 +31,7 @@ vi.mock("@silieco/core/platform", () => ({
 // Mock the API so we control search responses + observe calls.
 const searchIssuesMock = vi.fn();
 const searchProjectsMock = vi.fn();
+const listFileResourcesMock = vi.fn();
 vi.mock("@silieco/core/api", () => ({
   api: {
     get searchIssues() {
@@ -38,6 +39,9 @@ vi.mock("@silieco/core/api", () => ({
     },
     get searchProjects() {
       return searchProjectsMock;
+    },
+    get listFileResources() {
+      return listFileResourcesMock;
     },
   },
 }));
@@ -133,6 +137,8 @@ describe("createMentionSuggestion", () => {
   beforeEach(() => {
     searchIssuesMock.mockReset();
     searchProjectsMock.mockReset();
+    listFileResourcesMock.mockReset();
+    listFileResourcesMock.mockResolvedValue({ files: [], total: 0 });
     Element.prototype.scrollIntoView = vi.fn();
   });
 
@@ -244,6 +250,44 @@ describe("createMentionSuggestion", () => {
 
     expect(searchIssuesMock).not.toHaveBeenCalled();
     expect(searchProjectsMock).not.toHaveBeenCalled();
+  });
+
+  it("loads Space resource files into their own @ picker section", async () => {
+    listFileResourcesMock.mockResolvedValue({
+      files: [{
+        id: "file-1",
+        filename: "wireframe.png",
+        content_type: "image/png",
+        url: "/uploads/wireframe.png",
+        download_url: "/api/attachments/file-1/download",
+        markdown_url: "http://localhost:8080/api/attachments/file-1/download",
+        source_project_title: "Website",
+        source_issue_title: "Landing page",
+      }],
+      total: 1,
+    });
+    const command = vi.fn();
+    const onSelectResource = vi.fn();
+
+    render(
+      <I18nWrapper>
+        <MentionList
+          items={[]}
+          query="wire"
+          command={command}
+          includeResources
+          onSelectResource={onSelectResource}
+        />
+      </I18nWrapper>,
+    );
+
+    await waitFor(() => expect(screen.getByText("wireframe.png")).toBeInTheDocument());
+    expect(screen.getByText("Resource files")).toBeInTheDocument();
+    expect(screen.getByText("Website · Landing page")).toBeInTheDocument();
+
+    screen.getByText("wireframe.png").closest("button")?.click();
+    expect(onSelectResource).toHaveBeenCalledWith(expect.objectContaining({ type: "file", id: "file-1" }));
+    expect(command).not.toHaveBeenCalled();
   });
 
   it("captures Enter while the popup has no selectable items", () => {

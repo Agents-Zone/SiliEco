@@ -35,6 +35,7 @@ import { Markdown } from "@tiptap/markdown";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import type { AnyExtension } from "@tiptap/core";
 import type { UploadResult } from "@silieco/core/hooks/use-file-upload";
+import type { FileResource } from "@silieco/core/types";
 import { shouldAutoLink } from "@silieco/ui/markdown";
 import { escapeMarkdownLabel } from "../utils/escape-markdown-label";
 import { BaseMentionExtension } from "./mention-extension";
@@ -165,6 +166,8 @@ export interface EditorExtensionsOptions {
   /** Override @ behavior for chat context suggestions. */
   mentionMode?: "default" | "context";
   getMentionContextItems?: () => MentionItem[];
+  enableResourceMentions?: boolean;
+  onReferenceFileRef?: RefObject<((file: FileResource) => void) | undefined>;
   /** When true, attach the `/` picker. Default false. */
   enableSlashCommands?: boolean;
   /**
@@ -250,7 +253,12 @@ export function createEditorExtensions(
       ...(options.disableMentions
         ? { suggestion: { allow: () => false } }
         : options.queryClient
-          ? { suggestion: createMentionSuggestion(options.queryClient, { mode: options.mentionMode, getContextItems: options.getMentionContextItems }) }
+          ? { suggestion: createMentionSuggestion(options.queryClient, {
+              mode: options.mentionMode,
+              getContextItems: options.getMentionContextItems,
+              includeResources: options.enableResourceMentions,
+              onReferenceFileRef: options.onReferenceFileRef,
+            }) }
           : {}),
     }),
     // Linear-style bare identifier → issue mention. Attached only when a

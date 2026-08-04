@@ -52,6 +52,7 @@
     "preview_unsupported": "This file type can't be previewed.",
     "close": "Close",
     "open_in_new_tab": "Open in new tab",
+    "inline_preview_expired": "This HTML preview is no longer available.",
     "remove": "Remove attachment"
   },
   "link_hover": {
@@ -63,6 +64,7 @@
   "mention": {
     "group_users": "Users",
     "group_issues": "Tasks",
+    "group_resources": "Resource files",
     "all_members": "All members",
     "searching": "Searching...",
     "no_results": "No results",

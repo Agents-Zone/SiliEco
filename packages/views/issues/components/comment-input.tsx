@@ -15,6 +15,7 @@ import { useCommentUploads } from "./use-comment-uploads";
 import { AttachExistingFileButton } from "../../resources/resources-page";
 import { escapeMarkdownLabel } from "../../editor/utils/escape-markdown-label";
 import type { FileResource } from "@silieco/core/types";
+import { useIssueResourceReference } from "../hooks/use-issue-resource-reference";
 
 interface CommentInputProps {
   issueId: string;
@@ -46,6 +47,7 @@ function CommentInput({ issueId, workspaceId, projectId, onSubmit }: CommentInpu
   const [isEmpty, setIsEmpty] = useState(() => !initialDraft?.trim());
   const [suppressedAgentIds, setSuppressedAgentIds] = useState<Set<string>>(() => new Set());
   const triggerPreview = useCommentTriggerPreview({ issueId, content });
+  const referenceFileFromMention = useIssueResourceReference(issueId);
   // Uploads for this composer session (SILI-5181). Owned by the module-level
   // coordinator and persisted in the draft store, so closing/scrolling the
   // composer away no longer drops an in-flight upload — its result lands in the
@@ -219,7 +221,7 @@ function CommentInput({ issueId, workspaceId, projectId, onSubmit }: CommentInpu
   return (
     <div
       {...dropZoneProps}
-      className="relative flex flex-col rounded-lg bg-card pb-8 ring-1 ring-border"
+      className="comment-composer relative flex flex-col rounded-lg bg-card pb-8 ring-1 ring-border"
     >
       {/* Lock the editor while the send is in flight. ContentEditor can't
           toggle Tiptap's `editable` post-mount (see its docstring), so the
@@ -258,6 +260,8 @@ function CommentInput({ issueId, workspaceId, projectId, onSubmit }: CommentInpu
           debounceMs={100}
           currentIssueId={issueId}
           attachments={pendingAttachments}
+          enableResourceMentions
+          onReferenceFile={referenceFileFromMention}
           enableSlashCommands
           slashCommandMode="command"
         />

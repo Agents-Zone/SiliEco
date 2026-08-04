@@ -31,6 +31,7 @@ import { CollectionPageHeader, CollectionPageState } from "../layout";
 import { AppLink } from "../navigation";
 import { useDownloadAttachment } from "../editor/use-download-attachment";
 import { useT } from "../i18n";
+import { FileResourceLeadingVisual } from "./file-resource-leading-visual";
 
 function formatBytes(value: number): string {
   if (value < 1024) return `${value} B`;
@@ -75,7 +76,7 @@ function ResourceList({
         const references = referencesByAttachment?.get(file.id) ?? [];
         return (
         <div key={file.id} className="flex min-w-0 items-start gap-3 px-5 py-3 hover:bg-muted/30">
-          <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <FileResourceLeadingVisual file={file} />
           <div className="min-w-0 flex-1">
             <AppLink
               href={paths.attachmentPreview(file.id)}
@@ -351,7 +352,7 @@ export function AttachExistingFileButton({
                   <span className={`flex size-4 shrink-0 items-center justify-center rounded border ${selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/40"}`}>
                     {selected ? <Check className="size-3" /> : null}
                   </span>
-                  <FileText className="size-4 shrink-0 text-muted-foreground" />
+                  <FileResourceLeadingVisual file={file} compact />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-body">{file.filename}</span>
                     <span className="mt-0.5 flex flex-wrap gap-x-2 text-caption text-muted-foreground">
@@ -524,7 +525,7 @@ export function IssueFilesSection({ issueId }: { issueId: string }) {
       <div className="space-y-1 pl-2">
         {attachments.map((file) => (
           <div key={file.id} className="group flex min-w-0 items-center gap-2 rounded-md px-2 py-1 hover:bg-accent/50">
-            <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+            <FileResourceLeadingVisual file={file} compact />
             <AppLink
               href={paths.attachmentPreview(file.id)}
               className="min-w-0 flex-1 truncate text-caption hover:underline"

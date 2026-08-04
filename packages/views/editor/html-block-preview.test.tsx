@@ -11,9 +11,33 @@ vi.mock("../i18n", () => ({
           show_source: "Show source",
           fullscreen: "Fullscreen",
         },
+        attachment: {
+          preview: "Preview",
+          open_in_new_tab: "Open in new tab",
+        },
+        image: { download: "Download" },
       }),
   }),
 }));
+
+const { openInNewTabMock } = vi.hoisted(() => ({ openInNewTabMock: vi.fn() }));
+
+vi.mock("../navigation", () => ({
+  useNavigation: () => ({
+    push: vi.fn(),
+    replace: vi.fn(),
+    back: vi.fn(),
+    pathname: "/acme/tasks/task-1",
+    searchParams: new URLSearchParams(),
+    openInNewTab: openInNewTabMock,
+    getShareableUrl: (path: string) => `https://app.example${path}`,
+  }),
+}));
+
+vi.mock("@silieco/core/paths", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@silieco/core/paths")>();
+  return { ...actual, useWorkspaceSlug: () => "acme" };
+});
 
 // CodeBlockStatic depends on lowlight which has a heavy import surface and a
 // jsdom-incompatible code path. Stub to keep the source-view test focused on
@@ -63,9 +87,9 @@ describe("HtmlBlockPreview — preview / source toggle", () => {
 describe("HtmlBlockPreview — Maximize → Dialog", () => {
   it("does not render the Fullscreen button in source view (only when iframe is visible)", () => {
     render(<HtmlBlockPreview html="<p>hi</p>" />);
-    expect(screen.getByTitle("Fullscreen")).toBeTruthy();
+    expect(screen.getByTitle("Preview")).toBeTruthy();
     fireEvent.click(screen.getByTitle("Show source"));
-    expect(screen.queryByTitle("Fullscreen")).toBeNull();
+    expect(screen.queryByTitle("Preview")).toBeNull();
   });
 
   it("opens the fullscreen Dialog with a second iframe carrying the same srcdoc", () => {
@@ -74,7 +98,7 @@ describe("HtmlBlockPreview — Maximize → Dialog", () => {
     // (base-ui dialog renders Popup lazily).
     expect(document.querySelectorAll("iframe").length).toBe(1);
 
-    fireEvent.click(screen.getByTitle("Fullscreen"));
+    fireEvent.click(screen.getByTitle("Preview"));
 
     const frames = document.querySelectorAll("iframe");
     expect(frames.length).toBe(2);
@@ -85,5 +109,22 @@ describe("HtmlBlockPreview — Maximize → Dialog", () => {
       expect(srcdoc).toContain("scrollIntoView");
       expect(f.getAttribute("sandbox")).toBe("allow-scripts");
     }
+  });
+
+  it("shows the three persistent preview actions and opens an Electron tab", () => {
+    render(<HtmlBlockPreview html="<p>hi</p>" />);
+
+    const actions = screen.getByTestId("html-block-preview-actions");
+    expect(actions.className).not.toContain("opacity-0");
+    expect(screen.getByTitle("Preview")).toBeTruthy();
+    expect(screen.getByTitle("Open in new tab")).toBeTruthy();
+    expect(screen.getByTitle("Download")).toBeTruthy();
+
+    fireEvent.click(screen.getByTitle("Open in new tab"));
+    expect(openInNewTabMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/acme\/html-previews\//),
+      "HTML Preview",
+      { activate: true },
+    );
   });
 });

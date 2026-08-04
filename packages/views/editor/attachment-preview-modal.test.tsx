@@ -16,6 +16,7 @@ vi.mock("../platform", () => ({
 // declarations.
 const {
   getAttachmentTextContentMock,
+  getAttachmentBlobMock,
   downloadMock,
   getBaseUrlMock,
   FakePreviewTooLargeError,
@@ -35,6 +36,7 @@ const {
   }
   return {
     getAttachmentTextContentMock: vi.fn(),
+    getAttachmentBlobMock: vi.fn(),
     downloadMock: vi.fn(),
     // Default to the web shape (empty base, same-origin). Tests covering
     // the desktop-renderer / standalone-shell case override per-test.
@@ -47,6 +49,7 @@ const {
 vi.mock("@silieco/core/api", () => ({
   api: {
     getAttachmentTextContent: getAttachmentTextContentMock,
+    getAttachmentBlob: getAttachmentBlobMock,
     getBaseUrl: getBaseUrlMock,
   },
   PreviewTooLargeError: FakePreviewTooLargeError,
@@ -172,6 +175,11 @@ function ClosablePreview({ attachment }: { attachment: Attachment }) {
   );
 }
 
+const PDF_OBJECT_URL = "blob:https://app.example/pdf-preview";
+let originalCreateObjectURL: typeof URL.createObjectURL | undefined;
+let originalRevokeObjectURL: typeof URL.revokeObjectURL | undefined;
+let createObjectURLMock: ReturnType<typeof vi.fn>;
+
 beforeEach(() => {
   vi.clearAllMocks();
   navState.hasOpenInNewTab = true;
@@ -179,11 +187,38 @@ beforeEach(() => {
   // Default to web's same-origin empty base so existing absolute-URL tests
   // remain unaffected by the relative-URL resolution added in normalize().
   getBaseUrlMock.mockReturnValue("");
+  getAttachmentBlobMock.mockResolvedValue(
+    new Blob(["%PDF-1.7\n"], { type: "application/octet-stream" }),
+  );
+  originalCreateObjectURL = URL.createObjectURL;
+  originalRevokeObjectURL = URL.revokeObjectURL;
+  createObjectURLMock = vi.fn(() => PDF_OBJECT_URL);
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true,
+    value: createObjectURLMock,
+  });
+  Object.defineProperty(URL, "revokeObjectURL", {
+    configurable: true,
+    value: vi.fn(),
+  });
 });
 
 afterEach(() => {
+  restoreObjectURL("createObjectURL", originalCreateObjectURL);
+  restoreObjectURL("revokeObjectURL", originalRevokeObjectURL);
   vi.restoreAllMocks();
 });
+
+function restoreObjectURL(
+  prop: "createObjectURL" | "revokeObjectURL",
+  original: unknown,
+): void {
+  if (original) {
+    Object.defineProperty(URL, prop, { configurable: true, value: original });
+  } else {
+    delete (URL as Partial<typeof URL>)[prop];
+  }
+}
 
 describe("AttachmentPreviewModal — dispatch", () => {
   it("uses the image dispatcher in the standalone preview page", () => {
@@ -347,7 +382,7 @@ describe("AttachmentPreviewModal — server-relative download_url resolution (SI
     );
   });
 
-  it("prefixes the configured API base for PDF previews when download_url is server-relative", () => {
+  it("uses an authenticated PDF object URL when the API download is cross-origin", async () => {
     getBaseUrlMock.mockReturnValue("https://api.example.test");
     const att = makeAttachment({
       filename: "manual.pdf",
@@ -361,10 +396,15 @@ describe("AttachmentPreviewModal — server-relative download_url resolution (SI
         onClose={() => {}}
       />,
     );
-    const iframe = document.querySelector("iframe");
-    expect(iframe?.getAttribute("src")).toBe(
-      "https://api.example.test/api/attachments/att-1/download",
-    );
+    expect(screen.getByText("Loading preview…")).toBeTruthy();
+    await waitFor(() => {
+      expect(document.querySelector("iframe")?.getAttribute("src")).toBe(
+        PDF_OBJECT_URL,
+      );
+    });
+    expect(getAttachmentBlobMock).toHaveBeenCalledWith("att-1");
+    const pdfBlob = createObjectURLMock.mock.calls[0]?.[0] as Blob;
+    expect(pdfBlob.type).toBe("application/pdf");
   });
 
   it("keeps a same-origin relative URL untouched when the configured base is empty (web)", () => {

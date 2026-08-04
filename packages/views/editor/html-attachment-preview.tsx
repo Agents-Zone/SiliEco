@@ -4,7 +4,7 @@
  * HtmlAttachmentPreview — inline HTML attachment renderer.
  *
  * Visual model mirrors the image renderer: the iframe body is the card, and a
- * floating right-top toolbar reveals on hover with Preview (full-screen modal)
+ * persistent floating right-top toolbar provides Preview (full-screen modal)
  * / Open-in-new-tab / Download. No file-card chrome (icon + filename row).
  *
  * No "Copy code" button: this is a FILE, not an inline source snippet. The
@@ -84,82 +84,84 @@ export function HtmlAttachmentPreview({
 
   return (
     <div
-      className="group/html-preview relative my-1"
+      className="clear-both my-1 w-full"
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <HtmlPreviewBody
-        source={{ kind: "attachment", attachmentId }}
-        title={filename}
-        className={PREVIEW_HEIGHT}
-        placeholderClassName={isError ? ERROR_PLACEHOLDER_HEIGHT : PREVIEW_HEIGHT}
-        errorTestId="html-attachment-preview-error"
-      />
-      <div
-        className={cn(
-          "absolute right-2 top-2 flex items-center gap-0.5 rounded-md border border-border bg-background/95 p-0.5 shadow-sm transition-opacity",
-          // Error state pins the toolbar open — Preview / Download are the
-          // only user-reachable escape hatches when inline render fails.
-          isError
-            ? "opacity-100"
-            : "opacity-0 group-hover/html-preview:opacity-100",
-        )}
-      >
-        <button
-          type="button"
-          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          title={t(($) => $.attachment.preview)}
-          aria-label={t(($) => $.attachment.preview)}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onPreview();
-          }}
+      <div className="relative isolate w-full">
+        <HtmlPreviewBody
+          source={{ kind: "attachment", attachmentId }}
+          title={filename}
+          className={PREVIEW_HEIGHT}
+          placeholderClassName={isError ? ERROR_PLACEHOLDER_HEIGHT : PREVIEW_HEIGHT}
+          errorTestId="html-attachment-preview-error"
+        />
+        <div
+          className={cn(
+            "absolute right-2 top-2 z-30 flex items-center gap-0.5 rounded-md bg-black/75 p-1 text-white shadow-md backdrop-blur-sm",
+            // Keep all three primary actions visible over iframe content. An
+            // iframe owns its own pointer surface, so hover-only parent chrome
+            // is too easy to miss and can behave inconsistently across shells.
+            isError && "ring-1 ring-destructive/20",
+          )}
+          data-testid="html-attachment-preview-actions"
         >
-          <Maximize2 className="h-3.5 w-3.5" />
-        </button>
-        {canOpenInNewTab && (
           <button
             type="button"
-            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            title={t(($) => $.attachment.open_in_new_tab)}
-            aria-label={t(($) => $.attachment.open_in_new_tab)}
+            className="flex h-7 w-7 items-center justify-center rounded text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+            title={t(($) => $.attachment.preview)}
+            aria-label={t(($) => $.attachment.preview)}
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              handleOpenInNewTab();
+              onPreview();
             }}
           >
-            <ExternalLink className="h-3.5 w-3.5" />
+            <Maximize2 className="h-3.5 w-3.5" />
           </button>
-        )}
-        <button
-          type="button"
-          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          title={t(($) => $.image.download)}
-          aria-label={t(($) => $.image.download)}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onDownload();
-          }}
-        >
-          <Download className="h-3.5 w-3.5" />
-        </button>
-        {onDelete && (
+          {canOpenInNewTab && (
+            <button
+              type="button"
+              className="flex h-7 w-7 items-center justify-center rounded text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+              title={t(($) => $.attachment.open_in_new_tab)}
+              aria-label={t(($) => $.attachment.open_in_new_tab)}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleOpenInNewTab();
+              }}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             type="button"
-            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-            title={t(($) => $.attachment.remove)}
-            aria-label={t(($) => $.attachment.remove)}
+            className="flex h-7 w-7 items-center justify-center rounded text-white/80 transition-colors hover:bg-white/15 hover:text-white"
+            title={t(($) => $.image.download)}
+            aria-label={t(($) => $.image.download)}
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              onDelete();
+              onDownload();
             }}
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Download className="h-3.5 w-3.5" />
           </button>
-        )}
+          {onDelete && (
+            <button
+              type="button"
+              className="flex h-7 w-7 items-center justify-center rounded text-white/80 transition-colors hover:bg-destructive/70 hover:text-white"
+              title={t(($) => $.attachment.remove)}
+              aria-label={t(($) => $.attachment.remove)}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDelete();
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -32,6 +32,7 @@ const DOWNLOAD_SUFFIX = "/download";
  * path component as an id.
  */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DOWNLOAD_ID_IN_CONTENT_RE = /\/api\/attachments\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/download\b/gi;
 
 /**
  * Build the stable per-attachment download URL — the only attachment
@@ -90,6 +91,22 @@ export function attachmentIdFromDownloadURL(rawURL: string): string | undefined 
   const id = path.slice(DOWNLOAD_PREFIX.length, path.length - DOWNLOAD_SUFFIX.length);
   if (!UUID_RE.test(id)) return undefined;
   return id;
+}
+
+/**
+ * Collect the durable attachment IDs embedded in a Markdown body.
+ *
+ * Resource mentions use the same stable download route as uploads, and create
+ * forms need the IDs before the new Task exists so they can bind/reference the
+ * files after creation. Results are de-duplicated in first-seen order.
+ */
+export function attachmentIdsFromContent(content: string): string[] {
+  const ids = new Set<string>();
+  DOWNLOAD_ID_IN_CONTENT_RE.lastIndex = 0;
+  for (const match of content.matchAll(DOWNLOAD_ID_IN_CONTENT_RE)) {
+    if (match[1]) ids.add(match[1].toLowerCase());
+  }
+  return [...ids];
 }
 
 function stripQueryAndFragment(url: string): string {

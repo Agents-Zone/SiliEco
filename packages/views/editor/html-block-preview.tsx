@@ -21,9 +21,12 @@ import {
   Check,
   Code as CodeIcon,
   Copy,
+  Download,
   Eye,
+  ExternalLink,
   Maximize2,
 } from "lucide-react";
+import { useWorkspaceSlug } from "@silieco/core/paths";
 import { cn } from "@silieco/ui/lib/utils";
 import { copyText } from "@silieco/ui/lib/clipboard";
 import {
@@ -31,8 +34,14 @@ import {
   DialogContent,
 } from "@silieco/ui/components/ui/dialog";
 import { useT } from "../i18n";
+import { useNavigation } from "../navigation";
 import { CodeBlockStatic } from "./code-block-static";
 import { HtmlPreviewBody } from "./html-preview-body";
+import {
+  downloadInlineHtml,
+  openInlineHtmlInBrowserTab,
+  registerInlineHtmlPreview,
+} from "./inline-html-preview";
 
 const CODE_BLOCK_IFRAME_HEIGHT = "h-[480px]";
 
@@ -55,6 +64,8 @@ interface HtmlBlockPreviewProps {
 
 export function HtmlBlockPreview({ html, className }: HtmlBlockPreviewProps) {
   const { t } = useT("editor");
+  const navigation = useNavigation();
+  const workspaceSlug = useWorkspaceSlug();
   const [view, setView] = useState<"preview" | "source">("preview");
   const [copied, setCopied] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -70,12 +81,58 @@ export function HtmlBlockPreview({ html, className }: HtmlBlockPreviewProps) {
   const toggleView = () =>
     setView((v) => (v === "preview" ? "source" : "preview"));
 
+  const handleOpenInNewTab = () => {
+    if (navigation.openInNewTab && workspaceSlug) {
+      const previewId = registerInlineHtmlPreview(html);
+      navigation.openInNewTab(
+        `/${workspaceSlug}/html-previews/${previewId}`,
+        "HTML Preview",
+        { activate: true },
+      );
+      return;
+    }
+    openInlineHtmlInBrowserTab(html);
+  };
+
   return (
     <div className={cn("code-block-wrapper group/code relative my-3", className)}>
       <div
-        className="absolute top-0 right-0 z-10 flex items-center gap-1.5 px-2 py-1.5 opacity-0 transition-opacity group-hover/code:opacity-100 focus-within:opacity-100"
+        className="absolute right-2 top-2 z-10 flex items-center gap-0.5 rounded-md border border-border bg-background/95 p-0.5 shadow-sm backdrop-blur-sm"
+        data-testid="html-block-preview-actions"
       >
-        <span className="text-caption text-muted-foreground select-none">{HTML_LANGUAGE_LABEL}</span>
+        {view === "preview" && (
+          <>
+            <button
+              type="button"
+              onClick={() => setFullscreen(true)}
+              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title={t(($) => $.attachment.preview)}
+              aria-label={t(($) => $.attachment.preview)}
+            >
+              <Maximize2 className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenInNewTab}
+              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title={t(($) => $.attachment.open_in_new_tab)}
+              aria-label={t(($) => $.attachment.open_in_new_tab)}
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadInlineHtml(html)}
+              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title={t(($) => $.image.download)}
+              aria-label={t(($) => $.image.download)}
+            >
+              <Download className="h-3.5 w-3.5" />
+            </button>
+            <span className="mx-0.5 h-4 w-px bg-border" aria-hidden="true" />
+          </>
+        )}
+        <span className="sr-only">{HTML_LANGUAGE_LABEL}</span>
         <button
           type="button"
           onClick={toggleView}
@@ -97,17 +154,6 @@ export function HtmlBlockPreview({ html, className }: HtmlBlockPreviewProps) {
             <Eye className="h-3.5 w-3.5" />
           )}
         </button>
-        {view === "preview" && (
-          <button
-            type="button"
-            onClick={() => setFullscreen(true)}
-            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            title={t(($) => $.code_block.fullscreen)}
-            aria-label={t(($) => $.code_block.fullscreen)}
-          >
-            <Maximize2 className="h-3.5 w-3.5" />
-          </button>
-        )}
         <button
           type="button"
           onClick={handleCopy}

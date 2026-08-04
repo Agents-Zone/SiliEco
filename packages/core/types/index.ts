@@ -114,7 +114,7 @@ export type {
   AttachmentReferenceTargetType,
   ListAttachmentReferencesResponse,
 } from "./file-resource";
-export { attachmentDownloadPath, attachmentIdFromDownloadURL, contentReferencesAttachment } from "./attachment-url";
+export { attachmentDownloadPath, attachmentIdFromDownloadURL, attachmentIdsFromContent, contentReferencesAttachment } from "./attachment-url";
 export type {
   ChatSession,
   ChatLastMessage,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   attachmentDownloadPath,
   attachmentIdFromDownloadURL,
+  attachmentIdsFromContent,
   contentReferencesAttachment,
 } from "./attachment-url";
 
@@ -63,6 +64,26 @@ describe("attachmentIdFromDownloadURL", () => {
 
   it("returns undefined for empty input", () => {
     expect(attachmentIdFromDownloadURL("")).toBeUndefined();
+  });
+});
+
+describe("attachmentIdsFromContent", () => {
+  it("collects unique durable attachment links from image and file markdown", () => {
+    const second = "123e4567-e89b-42d3-a456-426614174001";
+    const content = [
+      `![shot](/api/attachments/${ID}/download)`,
+      `!file[brief.pdf](https://api.example.com/api/attachments/${second}/download)`,
+      `![duplicate](/api/attachments/${ID.toUpperCase()}/download?cache=1)`,
+    ].join("\n");
+
+    expect(attachmentIdsFromContent(content)).toEqual([ID, second]);
+  });
+
+  it("ignores non-download attachment routes and malformed ids", () => {
+    expect(attachmentIdsFromContent([
+      `/api/attachments/${ID}/content`,
+      "/api/attachments/not-a-uuid/download",
+    ].join("\n"))).toEqual([]);
   });
 });
 

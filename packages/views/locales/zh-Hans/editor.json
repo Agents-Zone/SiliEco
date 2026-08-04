@@ -52,6 +52,7 @@
     "preview_unsupported": "该文件类型暂不支持预览。",
     "close": "关闭",
     "open_in_new_tab": "在新标签页打开",
+    "inline_preview_expired": "此 HTML 预览已失效。",
     "remove": "移除附件"
   },
   "link_hover": {
@@ -63,6 +64,7 @@
   "mention": {
     "group_users": "用户",
     "group_issues": "Tasks",
+    "group_resources": "资源文件",
     "all_members": "所有成员",
     "searching": "搜索中...",
     "no_results": "无结果",

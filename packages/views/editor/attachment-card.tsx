@@ -9,7 +9,7 @@
  * that decision out of this file so this stays a single-purpose row UI.
  */
 
-import { Download, Eye, FileText, Loader2, Trash2 } from "lucide-react";
+import { Download, Eye, Loader2, Trash2 } from "lucide-react";
 import { useT } from "../i18n";
 import { getPreviewKind } from "./utils/preview";
 
@@ -35,15 +35,30 @@ function AttachmentCardChrome({
   onDelete,
 }: AttachmentCardChromeProps) {
   const { t } = useT("editor");
+  const extension = filename.includes(".")
+    ? filename.split(".").pop()?.slice(0, 4).toUpperCase()
+    : undefined;
   return (
     <div
-      className="flex items-center gap-2 rounded-md border border-border bg-muted/50 px-2.5 py-1 transition-colors hover:bg-muted"
+      className="attachment-card-chrome flex items-center gap-1.5 rounded-md border border-border bg-muted/50 px-2 py-1 transition-colors hover:bg-muted"
+      role={canPreview ? "button" : undefined}
+      tabIndex={canPreview ? 0 : undefined}
+      aria-label={canPreview ? t(($) => $.attachment.preview) : undefined}
+      onClick={canPreview ? onPreview : undefined}
+      onKeyDown={canPreview ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onPreview();
+        }
+      } : undefined}
       onMouseDown={(e) => e.stopPropagation()}
     >
       {uploading ? (
         <Loader2 className="size-4 shrink-0 animate-spin text-muted-foreground" />
       ) : (
-        <FileText className="size-4 shrink-0 text-muted-foreground" />
+        <span className="min-w-7 shrink-0 rounded bg-background px-1 py-0.5 text-center font-mono text-[9px] font-semibold leading-none text-muted-foreground" aria-hidden="true">
+          {extension || "FILE"}
+        </span>
       )}
       <div className="min-w-0 flex-1">
         <p className="truncate text-body">
@@ -63,6 +78,7 @@ function AttachmentCardChrome({
             e.stopPropagation();
             onPreview();
           }}
+          onClick={(e) => e.stopPropagation()}
         >
           <Eye className="size-3.5" />
         </button>
@@ -78,6 +94,7 @@ function AttachmentCardChrome({
             e.stopPropagation();
             onDownload();
           }}
+          onClick={(e) => e.stopPropagation()}
         >
           <Download className="size-3.5" />
         </button>
@@ -93,6 +110,7 @@ function AttachmentCardChrome({
             e.stopPropagation();
             onDelete();
           }}
+          onClick={(e) => e.stopPropagation()}
         >
           <Trash2 className="size-3.5" />
         </button>
@@ -146,7 +164,7 @@ export function AttachmentCard({
     !!href && kind !== null && (!!attachmentId || isUrlPreviewableKind);
 
   return (
-    <div className="my-1">
+    <div className="attachment-card my-1">
       <AttachmentCardChrome
         filename={filename}
         uploading={uploading}

@@ -31,7 +31,7 @@ import type {
   IssueAssigneeType,
   IssuePropertyValue,
 } from "@silieco/core/types";
-import { contentReferencesAttachment } from "@silieco/core/types";
+import { attachmentIdsFromContent, contentReferencesAttachment } from "@silieco/core/types";
 import {
   DialogContent,
   DialogTitle,
@@ -76,6 +76,7 @@ import {
   useSetIssueProperty,
 } from "@silieco/core/properties";
 import {
+  api,
   ApiError,
   DuplicateIssueErrorBodySchema,
   type DuplicateIssueErrorBody,
@@ -209,6 +210,7 @@ export function ManualCreatePanel({
 }) {
   const { t } = useT("modals");
   const { t: tEditor } = useT("editor");
+  const { t: tResources } = useT("resources");
   const router = useNavigation();
   const p = useWorkspacePaths();
   const workspaceName = useCurrentWorkspace()?.name;
@@ -493,6 +495,9 @@ export function ManualCreatePanel({
       const activeAttachmentIds = draftAttachments
         .filter((a) => contentReferencesAttachment(description ?? "", a))
         .map((a) => a.id);
+      const uploadedAttachmentIds = new Set(activeAttachmentIds);
+      const referencedResourceIds = attachmentIdsFromContent(description ?? "")
+        .filter((attachmentId) => !uploadedAttachmentIds.has(attachmentId));
       const issue = await createIssueMutation.mutateAsync({
         title: title.trim(),
         description,
@@ -520,6 +525,19 @@ export function ManualCreatePanel({
             }
           : {}),
       });
+
+      if (referencedResourceIds.length > 0) {
+        const results = await Promise.allSettled(
+          referencedResourceIds.map((attachmentId) =>
+            api.createAttachmentReference("issue", issue.id, attachmentId),
+          ),
+        );
+        const failed = results.filter((result) => result.status === "rejected").length;
+        if (failed > 0) {
+          console.error("[create-issue] resource reference failed", results);
+          toast.error(tResources(($) => $.reference_failed));
+        }
+      }
 
       // Custom-property values can only be addressed once the issue has an
       // id. Keep the modal in its submitting state until every value settles
@@ -907,6 +925,8 @@ export function ManualCreatePanel({
                 onUploadingChange={uploadGate.onUploadingChange}
                 debounceMs={500}
                 attachments={draftAttachments}
+                enableResourceMentions
+                className="resource-inline-content"
               />
               {descDragOver && <FileDropOverlay />}
             </div>

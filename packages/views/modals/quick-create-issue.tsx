@@ -50,6 +50,7 @@ import {
 import { useShortcut } from "@silieco/core/shortcuts";
 import { ShortcutKeycaps } from "../common/shortcut-keycaps";
 import {
+  attachmentIdsFromContent,
   contentReferencesAttachment,
   type Agent,
   type IssuePriority,
@@ -420,6 +421,10 @@ export function AgentCreatePanel({
       const activeAttachmentIds = pendingAttachments
         .filter((a) => contentReferencesAttachment(md, a))
         .map((a) => a.id);
+      const allAttachmentIds = [...new Set([
+        ...activeAttachmentIds,
+        ...attachmentIdsFromContent(md),
+      ])];
       setError(null);
       try {
         await api.quickCreateIssue({
@@ -437,7 +442,7 @@ export function AgentCreatePanel({
           ...(priority !== "none" ? { priority } : {}),
           ...(dueDate ? { due_date: dueDate } : {}),
           parent_issue_id: parentIssueId,
-          ...(activeAttachmentIds.length > 0 ? { attachment_ids: activeAttachmentIds } : {}),
+          ...(allAttachmentIds.length > 0 ? { attachment_ids: allAttachmentIds } : {}),
         });
         setLastActor(actor.type, actor.id);
         setLastProjectId(projectId);
@@ -656,6 +661,8 @@ export function AgentCreatePanel({
             attachments={pendingAttachments}
             onSubmit={submit}
             debounceMs={150}
+            enableResourceMentions
+            className="resource-inline-content"
           />
           {isDragOver && <FileDropOverlay />}
         </div>

@@ -55,6 +55,7 @@ import {
   type MarkdownManagerLike,
 } from "./utils/parse-markdown-chunked";
 import type { MentionItem } from "./extensions/mention-suggestion";
+import type { FileResource } from "@silieco/core/types";
 import type { IssueIdentifierResolver } from "./extensions/issue-identifier-autolink";
 import { createEditorExtensions } from "./extensions";
 import {
@@ -181,6 +182,9 @@ interface ContentEditorBaseProps {
   /** Chat can surface current/recent issue/project suggestions. Other editors use default mention behavior. */
   mentionMode?: "default" | "context";
   mentionContextItems?: MentionItem[];
+  /** Include durable Space files in the `@` picker and persist their Task reference on selection. */
+  enableResourceMentions?: boolean;
+  onReferenceFile?: (file: FileResource) => void;
   /** Enable the `/` command picker. Defaults false. */
   enableSlashCommands?: boolean;
   /**
@@ -360,6 +364,8 @@ const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
       disableMentions = false,
       mentionMode = "default",
       mentionContextItems,
+      enableResourceMentions = false,
+      onReferenceFile,
       enableSlashCommands = false,
       slashCommandMode = "skill",
       attachments,
@@ -387,6 +393,7 @@ const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
     // live without remounting the editor.
     const pasteAsFileThresholdRef = useRef<number | undefined>(pasteAsFileThreshold);
     const mentionContextItemsRef = useRef<MentionItem[]>(mentionContextItems ?? []);
+    const onReferenceFileRef = useRef(onReferenceFile);
     const lastEmittedRef = useRef<string | null>(null);
     // `content` already consumes the initial synchronized value when Tiptap
     // mounts. Track later changes separately so the sync effect does not parse
@@ -482,6 +489,7 @@ const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
     onUploadFileRef.current = wrappedOnUploadFile;
     pasteAsFileThresholdRef.current = pasteAsFileThreshold;
     mentionContextItemsRef.current = mentionContextItems ?? [];
+    onReferenceFileRef.current = onReferenceFile;
     flushPendingOnUnmountRef.current = flushPendingOnUnmount;
 
     const queryClient = useQueryClient();
@@ -582,6 +590,8 @@ const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
         disableMentions,
         mentionMode,
         getMentionContextItems: () => mentionContextItemsRef.current,
+        enableResourceMentions,
+        onReferenceFileRef,
         enableSlashCommands,
         slashCommandMode,
         resolveIssueIdentifierRef,

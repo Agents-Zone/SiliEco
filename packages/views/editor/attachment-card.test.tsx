@@ -83,6 +83,28 @@ describe("AttachmentCard — chrome row", () => {
     );
     expect(screen.getByTitle("Preview")).toBeTruthy();
   });
+
+  it("renders a compact file-type label and opens preview from the whole card", () => {
+    const onPreview = vi.fn();
+    render(
+      <AttachmentCard
+        filename="manual.pdf"
+        contentType="application/pdf"
+        href="https://cdn.example/manual.pdf"
+        onPreview={onPreview}
+        onDownload={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("PDF")).toBeTruthy();
+    const chrome = screen.getByText("manual.pdf").closest(".attachment-card-chrome");
+    expect(chrome).not.toBeNull();
+    fireEvent.click(chrome!);
+    expect(onPreview).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(chrome!, { key: "Enter" });
+    expect(onPreview).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("AttachmentCard — Eye / Download buttons", () => {

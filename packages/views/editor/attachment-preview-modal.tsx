@@ -40,8 +40,10 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
+  api,
   PreviewTooLargeError,
   PreviewUnsupportedError,
 } from "@silieco/core/api";
@@ -603,13 +605,7 @@ function PreviewContent({
 
   switch (kind) {
     case "pdf":
-      return (
-        <iframe
-          src={state.mediaUrl}
-          className="h-full w-full bg-background"
-          title={state.filename}
-        />
-      );
+      return <PdfPreview state={state} onDownload={onDownload} />;
     case "video":
       return (
         <div className="flex h-full w-full items-center justify-center bg-black">
@@ -670,6 +666,98 @@ function PreviewContent({
         />
       );
   }
+}
+
+/**
+ * Electron renders from a different origin than the API (localhost in dev,
+ * file: in packaged builds). Framing the authenticated API response directly
+ * is therefore rejected by its deliberately narrow `frame-ancestors` CSP.
+ * Fetching the bytes through the authenticated API client and framing a local
+ * object URL keeps that CSP intact while giving PDFium a renderer-owned URL.
+ *
+ * Signed storage URLs are left alone: fetching those in JavaScript would add a
+ * CORS requirement that native iframe loading does not have.
+ */
+function PdfPreview({
+  state,
+  onDownload,
+}: {
+  state: PreviewState;
+  onDownload: () => void;
+}) {
+  const { t } = useT("editor");
+  const needsObjectUrl = shouldUsePdfObjectUrl(state);
+  const { data, isError } = useQuery({
+    queryKey: ["attachment-pdf-blob", state.attachmentId],
+    queryFn: async () => {
+      const blob = await api.getAttachmentBlob(state.attachmentId as string);
+      // The download endpoint intentionally returns application/octet-stream.
+      // PDFium needs the concrete MIME type for an extensionless blob: URL.
+      return blob.type === "application/pdf"
+        ? blob
+        : blob.slice(0, blob.size, "application/pdf");
+    },
+    enabled: needsObjectUrl,
+    staleTime: Infinity,
+    gcTime: 5 * 60 * 1000,
+  });
+  const objectUrl = usePdfObjectUrl(data);
+
+  if (needsObjectUrl && isError) {
+    return (
+      <UnsupportedFallback
+        message={t(($) => $.attachment.preview_failed)}
+        onDownload={onDownload}
+      />
+    );
+  }
+
+  if (needsObjectUrl && !objectUrl) {
+    return (
+      <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+        <Loader2 className="mr-2 size-4 animate-spin" aria-hidden="true" />
+        {t(($) => $.attachment.preview_loading)}
+      </div>
+    );
+  }
+
+  return (
+    <iframe
+      src={objectUrl || state.mediaUrl}
+      className="h-full w-full bg-background"
+      title={state.filename}
+    />
+  );
+}
+
+function shouldUsePdfObjectUrl(state: PreviewState): boolean {
+  if (!state.attachmentId || typeof window === "undefined") return false;
+  const apiBase = api.getBaseUrl?.() ?? "";
+  if (!apiBase) return false;
+
+  try {
+    const url = new URL(state.mediaUrl, apiBase);
+    const escapedId = state.attachmentId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(
+      `/api/attachments/${escapedId}/(?:download|signed-download)$`,
+    ).test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function usePdfObjectUrl(blob: Blob | undefined): string {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    if (!blob || typeof URL.createObjectURL !== "function") {
+      setUrl("");
+      return;
+    }
+    const next = URL.createObjectURL(blob);
+    setUrl(next);
+    return () => URL.revokeObjectURL(next);
+  }, [blob]);
+  return url;
 }
 
 // ---------------------------------------------------------------------------
