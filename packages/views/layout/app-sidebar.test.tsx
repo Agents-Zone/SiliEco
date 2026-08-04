@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@silieco/core/api";
 import { AppSidebar } from "./app-sidebar";
 
-const { appForeground, chatSessions, chatStore, detail, deletePin, inboxItems, navigation, openModal, pins, projects, summary, workspaces } = vi.hoisted(() => ({
+const { appForeground, chatSessions, chatStore, detail, deletePin, inboxItems, navigation, navigationSearch, openModal, pins, projects, summary, workflowRuns, workspaces } = vi.hoisted(() => ({
   appForeground: { current: true },
   chatSessions: { current: [] as { id?: string; unread_count?: number }[] },
   chatStore: { current: { activeSessionId: null as string | null, isOpen: false } },
@@ -11,11 +11,21 @@ const { appForeground, chatSessions, chatStore, detail, deletePin, inboxItems, n
   deletePin: vi.fn(),
   inboxItems: { current: [] as { id: string; read: boolean }[] },
   navigation: { current: { pathname: "/acme/issues" } },
+  navigationSearch: { current: "" },
   openModal: vi.fn(),
   projects: {
     current: [] as { id: string; title: string }[],
   },
   summary: { current: [] as { workspace_id: string; count: number }[] },
+  workflowRuns: {
+    current: [] as Array<{
+      id: string;
+      title: string;
+      project_id: string | null;
+      status: string;
+      archived_at: string | null;
+    }>,
+  },
   workspaces: {
     current: [] as { id: string; name: string; slug: string; avatar_url: string | null }[],
   },
@@ -110,7 +120,7 @@ vi.mock("../navigation", () => ({
   AppLink: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
   useNavigation: () => ({
     pathname: navigation.current.pathname,
-    searchParams: new URLSearchParams(),
+    searchParams: new URLSearchParams(navigationSearch.current),
     push: vi.fn(),
   }),
 }));
@@ -142,6 +152,7 @@ vi.mock("@silieco/core/paths", async (importOriginal) => ({
     myIssues: () => "/acme/my-issues",
     issues: () => "/acme/issues",
     projects: () => "/acme/projects",
+    resources: () => "/acme/resources",
     workflows: () => "/acme/workflows",
     autopilots: () => "/acme/autopilots",
     agents: () => "/acme/agents",
@@ -152,6 +163,10 @@ vi.mock("@silieco/core/paths", async (importOriginal) => ({
     settings: () => "/acme/settings",
     issueDetail: (id: string) => `/acme/issues/${id}`,
     projectDetail: (id: string) => `/acme/projects/${id}`,
+    projectResources: (id: string) => `/acme/projects/${id}?section=resources`,
+    projectSop: (id: string) => `/acme/projects/${id}?section=sop`,
+    projectWorkflowRun: (projectId: string, runId: string) =>
+      `/acme/projects/${projectId}?run=${runId}`,
     workflowDetail: (id: string) => `/acme/workflows/${id}`,
   }),
 }));
@@ -189,6 +204,9 @@ vi.mock("@silieco/core/projects/queries", () => ({
   projectDetailOptions: () => ({ queryKey: ["project"] }),
   projectListOptions: () => ({ queryKey: ["projects"] }),
 }));
+vi.mock("@silieco/core/workflows", () => ({
+  workflowInstancesOptions: () => ({ queryKey: ["workflow-runs"] }),
+}));
 vi.mock("@silieco/core/workspace/queries", () => ({
   myInvitationListOptions: () => ({ queryKey: ["invitations"] }),
   workspaceKeys: { myInvitations: () => ["invitations"] },
@@ -204,6 +222,7 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
     if (queryKey[0] === "inbox") return { data: inboxItems.current };
     if (queryKey[0] === "workspaces") return { data: workspaces.current };
     if (queryKey[0] === "projects") return { data: projects.current };
+    if (queryKey[0] === "workflow-runs") return { data: workflowRuns.current };
     if (queryKey[0] === "chat" && queryKey[2] === "sessions") return { data: chatSessions.current };
     return { data: [] };
   },
@@ -216,6 +235,8 @@ describe("PinRow", () => {
     navigation.current.pathname = "/acme/issues";
     detail.current = { isPending: false, isError: false, data: null, error: null };
     summary.current = [];
+    navigationSearch.current = "";
+    workflowRuns.current = [];
     workspaces.current = [
       { id: "ws-1", name: "Acme", slug: "acme", avatar_url: null },
     ];
@@ -263,6 +284,8 @@ describe("Project accordion", () => {
   beforeEach(() => {
     openModal.mockReset();
     navigation.current.pathname = "/acme/projects/project-1";
+    navigationSearch.current = "";
+    workflowRuns.current = [];
     projects.current = [
       { id: "project-1", title: "Product launch" },
       { id: "project-2", title: "Customer onboarding" },
@@ -294,6 +317,38 @@ describe("Project accordion", () => {
     await waitFor(() => expect(chevron?.getAttribute("class")).toContain("rotate-90"));
     fireEvent.click(projectButton);
     await waitFor(() => expect(chevron?.getAttribute("class")).not.toContain("rotate-90"));
+  });
+
+  it("shows Project resources and each active SOP run as direct links", () => {
+    workflowRuns.current = [
+      {
+        id: "run-1",
+        title: "Release SOP · Run 1",
+        project_id: "project-1",
+        status: "active",
+        archived_at: null,
+      },
+      {
+        id: "run-done",
+        title: "Completed SOP",
+        project_id: "project-1",
+        status: "completed",
+        archived_at: null,
+      },
+    ];
+
+    const { container } = render(<AppSidebar />);
+
+    expect(
+      container.querySelector(
+        'a[href="/acme/projects/project-1?section=resources"]',
+      ),
+    ).not.toBeNull();
+    expect(screen.getByRole("link", { name: "Release SOP · Run 1" })).toHaveAttribute(
+      "href",
+      "/acme/projects/project-1?run=run-1",
+    );
+    expect(screen.queryByText("Completed SOP")).not.toBeInTheDocument();
   });
 });
 

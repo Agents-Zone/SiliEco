@@ -149,7 +149,12 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   const [progressOpen, setProgressOpen] = useState(true);
   const [descriptionOpen, setDescriptionOpen] = useState(true);
   const section = router.searchParams.get("section");
-  const activeSection = section === "sop" || section === "resources" ? section : "tasks";
+  const workflowRunId = router.searchParams.get("run") || undefined;
+  const activeSection = workflowRunId
+    ? "run"
+    : section === "sop" || section === "resources"
+      ? section
+      : "tasks";
 
   // Sidebar panel
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
@@ -495,9 +500,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                   size="sm"
                   className="h-7 gap-1.5 px-2.5 text-caption"
                   onClick={() =>
-                    router.replace(
-                      `${wsPaths.projectDetail(projectId)}?section=resources`,
-                    )
+                    router.replace(wsPaths.projectResources(projectId))
                   }
                 >
                   <FileText className="size-3.5" />
@@ -508,9 +511,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                   size="sm"
                   className="h-7 gap-1.5 px-2.5 text-caption"
                   onClick={() =>
-                    router.replace(
-                      `${wsPaths.projectDetail(projectId)}?section=sop`,
-                    )
+                    router.replace(wsPaths.projectSop(projectId))
                   }
                 >
                   <GitBranch className="size-3.5" />
@@ -582,8 +583,11 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
             }
           />
 
-          {activeSection === "tasks" ? (
-            <ProjectTaskSurface projectId={projectId} />
+          {activeSection === "tasks" || activeSection === "run" ? (
+            <ProjectTaskSurface
+              projectId={projectId}
+              workflowRunId={workflowRunId}
+            />
           ) : activeSection === "sop" ? (
             <ProjectSopDesigner projectId={projectId} />
           ) : (

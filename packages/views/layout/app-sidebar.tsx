@@ -17,11 +17,13 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   ChevronDown,
   ChevronRight,
+  FileText,
   FolderKanban,
   GitBranch,
   LogOut,
   Settings,
   Plus,
+  Route,
   SquarePen,
   X,
 } from "lucide-react";
@@ -70,6 +72,7 @@ import { useDeletePin, useReorderPins } from "@silieco/core/pins/mutations";
 import { issueDetailOptions } from "@silieco/core/issues/queries";
 import { projectDetailOptions } from "@silieco/core/projects/queries";
 import { projectListOptions } from "@silieco/core/projects/queries";
+import { workflowInstancesOptions } from "@silieco/core/workflows";
 import type { PinnedItem } from "@silieco/core/types";
 import { useLogout } from "../auth";
 import { ProjectIcon } from "../projects/components/project-icon";
@@ -492,6 +495,27 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
     ...projectListOptions(wsId ?? ""),
     enabled: Boolean(wsId),
   });
+  const { data: workflowRuns = [] } = useQuery({
+    ...workflowInstancesOptions(wsId ?? ""),
+    enabled: Boolean(wsId),
+  });
+  const activeRunsByProject = React.useMemo(() => {
+    const grouped = new Map<string, typeof workflowRuns>();
+    for (const run of workflowRuns) {
+      if (
+        !run.project_id ||
+        run.archived_at ||
+        run.status === "completed" ||
+        run.status === "cancelled"
+      ) {
+        continue;
+      }
+      const projectRuns = grouped.get(run.project_id) ?? [];
+      projectRuns.push(run);
+      grouped.set(run.project_id, projectRuns);
+    }
+    return grouped;
+  }, [workflowRuns]);
   const projectsHref = p.projects();
   const [expandedSpaceId, setExpandedSpaceId] = useState<string>();
   const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(
@@ -801,8 +825,13 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
                         <SidebarMenu className="gap-0.5">
                           {projects.map((project) => {
                             const projectHref = p.projectDetail(project.id);
+                            const resourceHref = p.projectResources(project.id);
+                            const sopHref = p.projectSop(project.id);
+                            const projectRuns = activeRunsByProject.get(project.id) ?? [];
                             const projectOpen = expandedProjectIds.has(project.id);
                             const projectActive = isNavActive(pathname, projectHref);
+                            const activeSection = searchParams.get("section");
+                            const activeRunId = searchParams.get("run");
                             return (
                               <Collapsible key={project.id} open={projectOpen}>
                                 <SidebarMenuItem>
@@ -838,7 +867,9 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
                                       className={cn(
                                         "flex h-7 items-center gap-2 rounded-md px-2 text-caption text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
                                         projectActive &&
-                                          searchParams.get("section") !== "sop" &&
+                                          !activeRunId &&
+                                          activeSection !== "sop" &&
+                                          activeSection !== "resources" &&
                                           "bg-sidebar-accent text-foreground",
                                       )}
                                     >
@@ -846,17 +877,53 @@ export function AppSidebar({ topSlot, searchSlot, headerClassName, headerStyle }
                                       {t(($) => $.tab.issue)}
                                     </AppLink>
                                     <AppLink
-                                      href={`${projectHref}?section=sop`}
+                                      href={resourceHref}
                                       className={cn(
                                         "flex h-7 items-center gap-2 rounded-md px-2 text-caption text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
                                         projectActive &&
-                                          searchParams.get("section") === "sop" &&
+                                          !activeRunId &&
+                                          activeSection === "resources" &&
+                                          "bg-sidebar-accent text-foreground",
+                                      )}
+                                    >
+                                      <FileText className="size-3.5" />
+                                      {t(($) => $.nav.resources)}
+                                    </AppLink>
+                                    <AppLink
+                                      href={sopHref}
+                                      className={cn(
+                                        "flex h-7 items-center gap-2 rounded-md px-2 text-caption text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+                                        projectActive &&
+                                          !activeRunId &&
+                                          activeSection === "sop" &&
                                           "bg-sidebar-accent text-foreground",
                                       )}
                                     >
                                       <GitBranch className="size-3.5" />
                                       SOP
                                     </AppLink>
+                                    {projectRuns.length > 0 && (
+                                      <div className="mt-1 border-t border-sidebar-border/70 pt-1">
+                                        {projectRuns.map((run) => (
+                                          <AppLink
+                                            key={run.id}
+                                            href={p.projectWorkflowRun(project.id, run.id)}
+                                            title={run.title}
+                                            className={cn(
+                                              "flex h-7 items-center gap-2 rounded-md px-2 text-caption text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
+                                              projectActive &&
+                                                activeRunId === run.id &&
+                                                "bg-sidebar-accent text-foreground",
+                                            )}
+                                          >
+                                            <Route className="size-3.5 shrink-0 text-brand" />
+                                            <span className="min-w-0 flex-1 truncate">
+                                              {run.title}
+                                            </span>
+                                          </AppLink>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 </CollapsibleContent>
                               </Collapsible>

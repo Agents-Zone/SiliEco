@@ -29,6 +29,7 @@ vi.mock("@silieco/core/modals", () => ({
 vi.mock("@silieco/core/paths", () => ({
   useWorkspacePaths: () => ({
     projectDetail: (projectId: string) => `/projects/${projectId}`,
+    projectSop: (projectId: string) => `/projects/${projectId}?section=sop`,
   }),
 }));
 
@@ -57,6 +58,7 @@ vi.mock("@tanstack/react-query", () => ({
       data: queryKey[1]
         ? {
             id: queryKey[1],
+            title: "Release SOP · Run 1",
             status: "active",
             current_stage_id: "stage-1",
             stages: [{ id: "stage-1", name: "Planning" }],
@@ -82,10 +84,13 @@ vi.mock("../../navigation", () => ({
   useNavigation: () => ({ replace: vi.fn() }),
 }));
 
-function surface(projectId: string) {
+function surface(projectId: string, workflowRunId?: string) {
   return (
     <I18nProvider locale="en" resources={{ en: { workflows: enWorkflows } }}>
-      <ProjectTaskSurface projectId={projectId} />
+      <ProjectTaskSurface
+        projectId={projectId}
+        workflowRunId={workflowRunId}
+      />
     </I18nProvider>
   );
 }
@@ -128,5 +133,18 @@ describe("ProjectTaskSurface", () => {
 
     expect(screen.getByRole("button", { name: "SOP Stage" })).toBeDisabled();
     expect(screen.getByTestId("project-task-board")).toBeInTheDocument();
+  });
+
+  it("opens a sidebar-selected SOP run directly without a run dropdown", () => {
+    runsByProject.current.set("project-1", [
+      { id: "run-1", title: "Release SOP · Run 1", status: "active" },
+      { id: "run-2", title: "Release SOP · Run 2", status: "active" },
+    ]);
+
+    render(surface("project-1", "run-1"));
+
+    expect(screen.getByTestId("workflow-board")).toHaveTextContent("run-1");
+    expect(screen.getByText("Release SOP · Run 1")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 });

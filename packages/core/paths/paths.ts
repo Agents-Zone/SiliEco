@@ -28,6 +28,11 @@ function workspaceScoped(slug: string) {
     projects: () => `${ws}/projects`,
     resources: () => `${ws}/resources`,
     projectDetail: (id: string) => `${ws}/projects/${encode(id)}`,
+    projectResources: (id: string) =>
+      `${ws}/projects/${encode(id)}?section=resources`,
+    projectSop: (id: string) => `${ws}/projects/${encode(id)}?section=sop`,
+    projectWorkflowRun: (projectId: string, runId: string) =>
+      `${ws}/projects/${encode(projectId)}?run=${encode(runId)}`,
     workflows: () => `${ws}/workflows`,
     workflowDetail: (id: string) => `${ws}/workflows/${encode(id)}`,
     autopilots: () => `${ws}/autopilots`,

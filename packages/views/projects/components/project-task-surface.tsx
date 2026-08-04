@@ -53,7 +53,13 @@ function objectString(value: Record<string, unknown>, key: string) {
   return typeof value[key] === "string" ? (value[key] as string) : "";
 }
 
-export function ProjectTaskSurface({ projectId }: { projectId: string }) {
+export function ProjectTaskSurface({
+  projectId,
+  workflowRunId,
+}: {
+  projectId: string;
+  workflowRunId?: string;
+}) {
   const { t } = useT("workflows");
   const workspaceId = useWorkspaceId();
   const workspacePaths = useWorkspacePaths();
@@ -79,12 +85,16 @@ export function ProjectTaskSurface({ projectId }: { projectId: string }) {
   const hasAvailableRuns = availableRuns.length > 0;
   const [selectedRunId, setSelectedRunId] = useState<string>();
   const effectiveMode: TaskManagementMode =
-    mode === "stage" && !hasAvailableRuns ? "lifecycle" : mode;
+    workflowRunId
+      ? "stage"
+      : mode === "stage" && !hasAvailableRuns
+        ? "lifecycle"
+        : mode;
 
   useEffect(() => {
-    setMode("lifecycle");
-    setSelectedRunId(undefined);
-  }, [projectId]);
+    setMode(workflowRunId ? "stage" : "lifecycle");
+    setSelectedRunId(workflowRunId);
+  }, [projectId, workflowRunId]);
 
   useEffect(() => {
     if (!hasAvailableRuns && mode === "stage") {
@@ -93,13 +103,17 @@ export function ProjectTaskSurface({ projectId }: { projectId: string }) {
   }, [hasAvailableRuns, mode]);
 
   useEffect(() => {
+    if (workflowRunId) {
+      setSelectedRunId(workflowRunId);
+      return;
+    }
     if (
       !selectedRunId ||
       !availableRuns.some((run) => run.id === selectedRunId)
     ) {
       setSelectedRunId(availableRuns[0]?.id);
     }
-  }, [availableRuns, selectedRunId]);
+  }, [availableRuns, selectedRunId, workflowRunId]);
   const { data: selectedRun } = useQuery({
     ...workflowInstanceOptions(workspaceId, selectedRunId ?? ""),
     enabled: effectiveMode === "stage" && Boolean(selectedRunId),
@@ -178,6 +192,21 @@ export function ProjectTaskSurface({ projectId }: { projectId: string }) {
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex min-h-12 flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-2">
         <div className="flex items-center gap-2">
+          {workflowRunId ? (
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-brand/10 text-brand">
+                <Route className="size-3.5" />
+              </span>
+              <div className="min-w-0">
+                <p className="max-w-72 truncate text-caption font-semibold text-foreground">
+                  {selectedRun?.title ?? t(($) => $.board.loading)}
+                </p>
+                <p className="text-micro text-muted-foreground">
+                  {t(($) => $.project_tasks.stage_hint)}
+                </p>
+              </div>
+            </div>
+          ) : (
           <div className="flex rounded-lg bg-muted p-0.5">
             <button
               type="button"
@@ -210,15 +239,19 @@ export function ProjectTaskSurface({ projectId }: { projectId: string }) {
               {t(($) => $.project_tasks.stage)}
             </button>
           </div>
+          )}
+          {!workflowRunId && (
           <span className="hidden text-caption text-muted-foreground sm:inline">
             {effectiveMode === "lifecycle"
               ? t(($) => $.project_tasks.lifecycle_hint)
               : t(($) => $.project_tasks.stage_hint)}
           </span>
+          )}
         </div>
 
         {effectiveMode === "stage" && hasAvailableRuns && (
           <div className="flex items-center gap-2">
+            {!workflowRunId && (
             <Select
               items={availableRuns.map((run) => ({
                 value: run.id,
@@ -250,6 +283,7 @@ export function ProjectTaskSurface({ projectId }: { projectId: string }) {
                 ))}
               </SelectContent>
             </Select>
+            )}
             {selectedRun && (
               <Badge variant="secondary">{selectedRun.status}</Badge>
             )}
@@ -317,7 +351,7 @@ export function ProjectTaskSurface({ projectId }: { projectId: string }) {
               className="mt-4"
               onClick={() =>
                 navigation.replace(
-                  `${workspacePaths.projectDetail(projectId)}?section=sop`,
+                  workspacePaths.projectSop(projectId),
                 )
               }
             >
