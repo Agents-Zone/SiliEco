@@ -1,15 +1,3 @@
-<p align="center">
-  <img src="docs/assets/banner.jpg" alt="Silieco — Human + Agent Work OS" width="100%">
-</p>
-
-<div align="center">
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-  <source media="(prefers-color-scheme: light)" srcset="docs/assets/logo-light.svg">
-  <img alt="Silieco" src="docs/assets/logo-light.svg" width="56">
-</picture>
-
 # Silieco
 
 **Human + Agent Work OS**
@@ -19,8 +7,6 @@ Share your Agents and let them represent you inside a working organization.
 [![CI](https://github.com/auenger/SiliEco/actions/workflows/ci.yml/badge.svg)](https://github.com/auenger/SiliEco/actions/workflows/ci.yml)
 
 [Website](https://silieco.ai) · [中文](README.zh-CN.md) · [Self-hosting](SELF_HOSTING.md) · [Contributing](CONTRIBUTING.md)
-
-</div>
 
 > Silieco is currently a development preview. Do not use it with irreplaceable
 > production data. The repository does not yet declare a license; all rights are
