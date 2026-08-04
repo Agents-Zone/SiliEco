@@ -649,6 +649,12 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to delete project workflows")
 		return
 	}
+	if err := qtx.DeleteAttachmentReferencesByTarget(r.Context(), db.DeleteAttachmentReferencesByTargetParams{
+		WorkspaceID: project.WorkspaceID, TargetType: "project", TargetID: project.ID,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to remove project file references")
+		return
+	}
 	if err := qtx.DeleteProject(r.Context(), db.DeleteProjectParams{
 		ID:          project.ID,
 		WorkspaceID: project.WorkspaceID,

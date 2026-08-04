@@ -76,6 +76,8 @@
     "./projects/queries": "./projects/queries.ts",
     "./projects/mutations": "./projects/mutations.ts",
     "./projects/config": "./projects/config.ts",
+    "./resources": "./resources/index.ts",
+    "./resources/queries": "./resources/queries.ts",
     "./workflows": "./workflows/index.ts",
     "./workflows/queries": "./workflows/queries.ts",
     "./workflows/mutations": "./workflows/mutations.ts",

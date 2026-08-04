@@ -3360,15 +3360,39 @@ func (h *Handler) DeleteIssue(w http.ResponseWriter, r *http.Request) {
 	// Fail any linked autopilot runs before delete (ON DELETE SET NULL clears issue_id).
 	h.Queries.FailAutopilotRunsByIssue(r.Context(), issue.ID)
 
-	// Collect all attachment URLs (issue-level + comment-level) before CASCADE delete.
-	attachmentURLs, _ := h.Queries.ListAttachmentURLsByIssueOrComments(r.Context(), issue.ID)
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to start delete transaction")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	qtx := h.Queries.WithTx(tx)
+	if err := qtx.DeleteAttachmentReferencesByTarget(r.Context(), db.DeleteAttachmentReferencesByTargetParams{
+		WorkspaceID: issue.WorkspaceID, TargetType: "issue", TargetID: issue.ID,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to remove attachment references")
+		return
+	}
+	if _, err := qtx.DetachReferencedAttachmentsFromIssue(r.Context(), db.DetachReferencedAttachmentsFromIssueParams{
+		WorkspaceID: issue.WorkspaceID, IssueID: issue.ID,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to preserve referenced attachments")
+		return
+	}
+	// Referenced files were detached above, so only unreferenced objects are
+	// collected for physical deletion after the database transaction commits.
+	attachmentURLs, _ := qtx.ListAttachmentURLsByIssueOrComments(r.Context(), issue.ID)
 
-	err := h.Queries.DeleteIssue(r.Context(), db.DeleteIssueParams{
+	err = qtx.DeleteIssue(r.Context(), db.DeleteIssueParams{
 		ID:          issue.ID,
 		WorkspaceID: issue.WorkspaceID,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete issue")
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to commit issue delete")
 		return
 	}
 
@@ -3735,14 +3759,34 @@ func (h *Handler) BatchDeleteIssues(w http.ResponseWriter, r *http.Request) {
 		h.TaskService.CancelTasksForIssue(r.Context(), issue.ID)
 		h.Queries.FailAutopilotRunsByIssue(r.Context(), issue.ID)
 
-		// Collect attachment URLs before CASCADE delete to clean up S3 objects.
-		attachmentURLs, _ := h.Queries.ListAttachmentURLsByIssueOrComments(r.Context(), issue.ID)
+		tx, err := h.TxStarter.Begin(r.Context())
+		if err != nil {
+			continue
+		}
+		qtx := h.Queries.WithTx(tx)
+		if err := qtx.DeleteAttachmentReferencesByTarget(r.Context(), db.DeleteAttachmentReferencesByTargetParams{
+			WorkspaceID: issue.WorkspaceID, TargetType: "issue", TargetID: issue.ID,
+		}); err != nil {
+			tx.Rollback(r.Context())
+			continue
+		}
+		if _, err := qtx.DetachReferencedAttachmentsFromIssue(r.Context(), db.DetachReferencedAttachmentsFromIssueParams{
+			WorkspaceID: issue.WorkspaceID, IssueID: issue.ID,
+		}); err != nil {
+			tx.Rollback(r.Context())
+			continue
+		}
+		attachmentURLs, _ := qtx.ListAttachmentURLsByIssueOrComments(r.Context(), issue.ID)
 
-		if err := h.Queries.DeleteIssue(r.Context(), db.DeleteIssueParams{
+		if err := qtx.DeleteIssue(r.Context(), db.DeleteIssueParams{
 			ID:          issue.ID,
 			WorkspaceID: issue.WorkspaceID,
 		}); err != nil {
+			tx.Rollback(r.Context())
 			slog.Warn("batch delete issue failed", "issue_id", issueID, "error", err)
+			continue
+		}
+		if err := tx.Commit(r.Context()); err != nil {
 			continue
 		}
 

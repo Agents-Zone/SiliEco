@@ -56,6 +56,7 @@
   },
   "detail": {
     "task_tab": "Task",
+    "resource_tab": "リソース",
     "not_found": "プロジェクトが見つかりません",
     "breadcrumb_fallback": "プロジェクト",
     "title_placeholder": "プロジェクトのタイトル",

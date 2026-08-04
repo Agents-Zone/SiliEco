@@ -144,6 +144,28 @@ interface AttachmentPreviewModalProps {
   onClose: () => void;
 }
 
+/** Full-page variant used by the workspace attachment preview route. */
+export function AttachmentStandalonePreview({
+  attachment,
+}: {
+  attachment: Attachment;
+}) {
+  const download = useDownloadAttachment();
+  const state = normalize({ kind: "full", attachment });
+  const kind = getPreviewKind(state.contentType, state.filename);
+
+  return (
+    <div className="flex h-full min-h-0 w-full flex-col bg-background">
+      <PreviewPanel
+        kind={kind}
+        source={{ kind: "full", attachment }}
+        state={state}
+        onDownload={() => void download(attachment.id)}
+      />
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Hook — local state + ready-to-mount modal JSX
 // ---------------------------------------------------------------------------
@@ -364,7 +386,7 @@ function PreviewPanel({
   kind: PreviewKind | null;
   source: PreviewSource;
   state: PreviewState;
-  onClose: () => void;
+  onClose?: () => void;
   onDownload: () => void;
   onOpenInNewTab?: () => void;
 }) {
@@ -425,15 +447,17 @@ function PreviewPanel({
           >
             <Download className="size-4" />
           </button>
-          <button
-            type="button"
-            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-            title={t(($) => $.attachment.close)}
-            aria-label={t(($) => $.attachment.close)}
-            onClick={onClose}
-          >
-            <X className="size-4" />
-          </button>
+          {onClose ? (
+            <button
+              type="button"
+              className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              title={t(($) => $.attachment.close)}
+              aria-label={t(($) => $.attachment.close)}
+              onClick={onClose}
+            >
+              <X className="size-4" />
+            </button>
+          ) : null}
         </div>
       </div>
       {/* Image gets a flex column: the canvas sizes itself with `flex: 1 1

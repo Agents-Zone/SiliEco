@@ -1361,6 +1361,23 @@ func (h *Handler) DeleteAttachment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	referenceCount, err := h.Queries.CountAttachmentReferences(r.Context(), db.CountAttachmentReferencesParams{
+		WorkspaceID:  att.WorkspaceID,
+		AttachmentID: att.ID,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to check attachment references")
+		return
+	}
+	if referenceCount > 0 {
+		writeJSON(w, http.StatusConflict, map[string]any{
+			"error":           "attachment is referenced by other resources",
+			"code":            "attachment_in_use",
+			"reference_count": referenceCount,
+		})
+		return
+	}
+
 	// Only the uploader (or workspace admin) can delete
 	uploaderID := uuidToString(att.UploaderID)
 	isUploader := att.UploaderType == "member" && uploaderID == userID

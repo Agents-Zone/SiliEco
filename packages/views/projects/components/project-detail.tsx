@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import { useDefaultLayout, usePanelRef } from "react-resizable-panels";
-import { Check, ChevronRight, GitBranch, Link2, ListTodo, MoreHorizontal, PanelRight, Pin, PinOff, Trash2, UserMinus } from "lucide-react";
+import { Check, ChevronRight, FileText, GitBranch, Link2, ListTodo, MoreHorizontal, PanelRight, Pin, PinOff, Trash2, UserMinus } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@silieco/ui/lib/utils";
 import { copyText } from "@silieco/ui/lib/clipboard";
@@ -72,6 +72,7 @@ import { useProjectStatusLabels, useProjectPriorityLabels } from "./labels";
 import { matchesPinyin } from "../../editor/extensions/pinyin-match";
 import { ProjectSopDesigner } from "../../workflows/components";
 import { ProjectTaskSurface } from "./project-task-surface";
+import { ProjectFilesPage } from "../../resources";
 
 // ---------------------------------------------------------------------------
 // Property row — sidebar property display
@@ -135,6 +136,9 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
     const me = members.find((m) => m.user_id === userId);
     return me?.role === "owner" || me?.role === "admin";
   }, [members, userId]);
+  const canManageResources =
+    isWorkspaceAdmin ||
+    (project?.lead_type === "member" && project.lead_id === userId);
   const createPin = useCreatePin();
   const deletePinMut = useDeletePin();
   const descEditorRef = useRef<ContentEditorRef>(null);
@@ -144,8 +148,8 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
   const [propertiesOpen, setPropertiesOpen] = useState(true);
   const [progressOpen, setProgressOpen] = useState(true);
   const [descriptionOpen, setDescriptionOpen] = useState(true);
-  const activeSection =
-    router.searchParams.get("section") === "sop" ? "sop" : "tasks";
+  const section = router.searchParams.get("section");
+  const activeSection = section === "sop" || section === "resources" ? section : "tasks";
 
   // Sidebar panel
   const { defaultLayout, onLayoutChanged } = useDefaultLayout({
@@ -462,7 +466,7 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
       </div>
 
       {/* Resources */}
-      <ProjectResourcesSection projectId={projectId} />
+      <ProjectResourcesSection projectId={projectId} canManage={canManageResources} />
     </div>
   );
 
@@ -485,6 +489,19 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
                 >
                   <ListTodo className="size-3.5" />
                   {t(($) => $.detail.task_tab)}
+                </Button>
+                <Button
+                  variant={activeSection === "resources" ? "secondary" : "ghost"}
+                  size="sm"
+                  className="h-7 gap-1.5 px-2.5 text-caption"
+                  onClick={() =>
+                    router.replace(
+                      `${wsPaths.projectDetail(projectId)}?section=resources`,
+                    )
+                  }
+                >
+                  <FileText className="size-3.5" />
+                  {t(($) => $.detail.resource_tab)}
                 </Button>
                 <Button
                   variant={activeSection === "sop" ? "secondary" : "ghost"}
@@ -567,8 +584,21 @@ export function ProjectDetail({ projectId }: { projectId: string }) {
 
           {activeSection === "tasks" ? (
             <ProjectTaskSurface projectId={projectId} />
-          ) : (
+          ) : activeSection === "sop" ? (
             <ProjectSopDesigner projectId={projectId} />
+          ) : (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="border-b px-5 py-4">
+                <ProjectResourcesSection
+                  projectId={projectId}
+                  canManage={canManageResources}
+                />
+              </div>
+              <ProjectFilesPage
+                projectId={projectId}
+                canManage={canManageResources}
+              />
+            </div>
           )}
           </div>
         </ResizablePanel>

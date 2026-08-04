@@ -17,12 +17,14 @@ import {
   EMPTY_CREATE_FEEDBACK_RESPONSE,
   EMPTY_INBOX_ITEMS,
   EMPTY_INBOX_UNREAD_SUMMARY,
+  EMPTY_LIST_FILE_RESOURCES_RESPONSE,
   EMPTY_SEARCH_PROJECTS_RESPONSE,
   EMPTY_USER,
   InboxItemListSchema,
   InboxUnreadSummarySchema,
   IssueTriggerPreviewSchema,
   ListIssuesResponseSchema,
+  ListFileResourcesResponseSchema,
   ListPropertiesResponseSchema,
   MALFORMED_RUNTIME_MODEL_LIST_REQUEST,
   RuntimeModelListRequestSchema,
@@ -160,6 +162,54 @@ describe("IssueSchema (via ListIssuesResponseSchema)", () => {
     };
     const parsed = ListIssuesResponseSchema.parse(payload);
     expect(parsed.issues[0]?.properties).toEqual({ "def-2": "opt-a" });
+  });
+});
+
+describe("ListFileResourcesResponseSchema", () => {
+  const file = {
+    id: "attachment-1",
+    workspace_id: "workspace-1",
+    issue_id: "issue-1",
+    comment_id: null,
+    chat_session_id: null,
+    chat_message_id: null,
+    uploader_type: "member",
+    uploader_id: "user-1",
+    filename: "brief.pdf",
+    url: "/files/brief.pdf",
+    download_url: "/api/attachments/attachment-1/download",
+    markdown_url: "/api/attachments/attachment-1/download",
+    content_type: "application/pdf",
+    size_bytes: 1024,
+    created_at: "2026-08-04T00:00:00Z",
+    source_issue_title: "Design resources",
+    source_issue_number: 42,
+    source_project_id: "project-1",
+    source_project_title: "Core",
+    reference_count: 2,
+  };
+
+  it("parses the fields consumed by the resource pages", () => {
+    const parsed = parseWithFallback(
+      { files: [file], total: 1 },
+      ListFileResourcesResponseSchema,
+      EMPTY_LIST_FILE_RESOURCES_RESPONSE,
+      { endpoint: "/api/files" },
+    );
+    expect(parsed).toMatchObject({
+      total: 1,
+      files: [{ filename: "brief.pdf", size_bytes: 1024, reference_count: 2 }],
+    });
+  });
+
+  it("falls back when a required display field is malformed", () => {
+    const parsed = parseWithFallback(
+      { files: [{ ...file, size_bytes: "large" }], total: 1 },
+      ListFileResourcesResponseSchema,
+      EMPTY_LIST_FILE_RESOURCES_RESPONSE,
+      { endpoint: "/api/files" },
+    );
+    expect(parsed).toEqual(EMPTY_LIST_FILE_RESOURCES_RESPONSE);
   });
 });
 

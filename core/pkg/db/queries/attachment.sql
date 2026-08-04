@@ -10,9 +10,19 @@ VALUES (
 RETURNING *;
 
 -- name: ListAttachmentsByIssue :many
-SELECT * FROM attachment
-WHERE issue_id = $1 AND workspace_id = $2
-ORDER BY created_at ASC;
+SELECT a.* FROM attachment a
+WHERE a.workspace_id = $2
+  AND (
+      a.issue_id = $1
+      OR EXISTS (
+          SELECT 1 FROM attachment_reference ar
+          WHERE ar.workspace_id = a.workspace_id
+            AND ar.attachment_id = a.id
+            AND ar.target_type = 'issue'
+            AND ar.target_id = $1
+      )
+  )
+ORDER BY a.created_at ASC;
 
 -- name: ListAttachmentsByComment :many
 SELECT * FROM attachment

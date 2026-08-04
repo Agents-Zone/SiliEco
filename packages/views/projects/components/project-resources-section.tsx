@@ -64,7 +64,13 @@ function isLocalDirectoryRef(r: ProjectResource): r is ProjectResource & {
   return r.resource_type === "local_directory";
 }
 
-export function ProjectResourcesSection({ projectId }: { projectId: string }) {
+export function ProjectResourcesSection({
+  projectId,
+  canManage = false,
+}: {
+  projectId: string;
+  canManage?: boolean;
+}) {
   const { t } = useT("projects");
   const wsId = useWorkspaceId();
   const workspace = useCurrentWorkspace();
@@ -256,14 +262,15 @@ export function ProjectResourcesSection({ projectId }: { projectId: string }) {
                   key={resource.id}
                   resource={resource}
                   localDaemonId={localDaemonId}
-                  canEdit={desktopMode}
+                  canEdit={desktopMode && canManage}
+                  canRemove={canManage}
                   onRemove={() => handleRemove(resource)}
                   onRenameLocalDirectory={handleRenameLocalDirectory}
                 />
               ))}
             </div>
           )}
-          <Popover
+          {canManage ? <Popover
             open={addOpen}
             onOpenChange={(v) => {
               setAddOpen(v);
@@ -350,7 +357,7 @@ export function ProjectResourcesSection({ projectId }: { projectId: string }) {
                 }}
               />
             </PopoverContent>
-          </Popover>
+          </Popover> : null}
           {desktopMode && (
             <div className="flex flex-col">
               <Button
@@ -392,6 +399,7 @@ interface ResourceRowProps {
   resource: ProjectResource;
   localDaemonId: string | null;
   canEdit: boolean;
+  canRemove: boolean;
   onRemove: () => void;
   onRenameLocalDirectory: (
     resource: ProjectResource & { resource_ref: LocalDirectoryResourceRef },
@@ -403,6 +411,7 @@ function ResourceRow({
   resource,
   localDaemonId,
   canEdit,
+  canRemove,
   onRemove,
   onRenameLocalDirectory,
 }: ResourceRowProps) {
@@ -429,14 +438,14 @@ function ResourceRow({
           />
           <TooltipContent side="top" className="whitespace-pre-line">{tooltip}</TooltipContent>
         </Tooltip>
-        <button
+        {canRemove ? <button
           type="button"
           onClick={onRemove}
           className="opacity-0 group-hover:opacity-100 transition-opacity rounded-sm p-0.5 hover:bg-accent"
           title={t(($) => $.resources.remove_tooltip)}
         >
           <Trash2 className="size-3 text-muted-foreground" />
-        </button>
+        </button> : null}
       </div>
     );
   }
@@ -447,6 +456,7 @@ function ResourceRow({
         resource={resource}
         localDaemonId={localDaemonId}
         canEdit={canEdit}
+        canRemove={canRemove}
         onRemove={onRemove}
         onRename={onRenameLocalDirectory}
       />
@@ -458,14 +468,14 @@ function ResourceRow({
       <span className="truncate flex-1">
         {resource.label || resource.resource_type}
       </span>
-      <button
+      {canRemove ? <button
         type="button"
         onClick={onRemove}
         className="rounded-sm p-0.5 hover:bg-accent"
         title={t(($) => $.resources.remove_tooltip)}
       >
         <Trash2 className="size-3" />
-      </button>
+      </button> : null}
     </div>
   );
 }
@@ -474,6 +484,7 @@ interface LocalDirectoryRowProps {
   resource: ProjectResource & { resource_ref: LocalDirectoryResourceRef };
   localDaemonId: string | null;
   canEdit: boolean;
+  canRemove: boolean;
   onRemove: () => void;
   onRename: (
     resource: ProjectResource & { resource_ref: LocalDirectoryResourceRef },
@@ -485,6 +496,7 @@ function LocalDirectoryRow({
   resource,
   localDaemonId,
   canEdit,
+  canRemove,
   onRemove,
   onRename,
 }: LocalDirectoryRowProps) {
@@ -573,14 +585,14 @@ function LocalDirectoryRow({
           <Pencil className="size-3 text-muted-foreground" />
         </button>
       )}
-      <button
+      {canRemove ? <button
         type="button"
         onClick={onRemove}
         className="opacity-0 group-hover:opacity-100 transition-opacity rounded-sm p-0.5 hover:bg-accent"
         title={t(($) => $.resources.remove_tooltip)}
       >
         <Trash2 className="size-3 text-muted-foreground" />
-      </button>
+      </button> : null}
     </div>
   );
 }

@@ -57,6 +57,7 @@
   },
   "detail": {
     "task_tab": "Task",
+    "resource_tab": "Resources",
     "not_found": "Project not found",
     "breadcrumb_fallback": "Projects",
     "title_placeholder": "Project title",

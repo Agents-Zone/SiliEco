@@ -2854,9 +2854,6 @@ func (h *Handler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Collect attachment URLs before CASCADE delete removes them.
-	attachmentURLs, _ := h.Queries.ListAttachmentURLsByCommentID(r.Context(), comment.ID)
-
 	// Cancel any active task whose planned batch contains this comment so the
 	// agent does not run with the now-deleted content already embedded. Must
 	// run before DeleteComment because the FK ON DELETE SET NULL would
@@ -2866,7 +2863,22 @@ func (h *Handler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("cancel tasks for deleted trigger comment failed", append(logger.RequestAttrs(r), "error", cancelErr, "comment_id", commentId)...)
 	}
 
-	if err := h.Queries.DeleteComment(r.Context(), db.DeleteCommentParams{
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to start delete transaction")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	qtx := h.Queries.WithTx(tx)
+	if _, err := qtx.DetachReferencedAttachmentsFromComment(r.Context(), db.DetachReferencedAttachmentsFromCommentParams{
+		WorkspaceID: comment.WorkspaceID, CommentID: comment.ID,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to preserve referenced attachments")
+		return
+	}
+	attachmentURLs, _ := qtx.ListAttachmentURLsByCommentID(r.Context(), comment.ID)
+
+	if err := qtx.DeleteComment(r.Context(), db.DeleteCommentParams{
 		ID:          comment.ID,
 		WorkspaceID: comment.WorkspaceID,
 	}); err != nil {
@@ -2876,6 +2888,10 @@ func (h *Handler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 		// trigger) before returning the storage error.
 		h.retriggerCancelledTaskSurvivors(r.Context(), issue, cancelled, pgtype.UUID{})
 		writeError(w, http.StatusInternalServerError, "failed to delete comment")
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to commit comment delete")
 		return
 	}
 

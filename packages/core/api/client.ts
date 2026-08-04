@@ -82,6 +82,9 @@ import type {
   AssigneeFrequencyEntry,
   TaskMessagePayload,
   Attachment,
+  AttachmentReference,
+  ListAttachmentReferencesResponse,
+  ListFileResourcesResponse,
   ChatSession,
   ChatPinnedAgent,
   ChatMessage,
@@ -193,6 +196,9 @@ import {
   AgentTemplateSchema,
   AgentTemplateSummaryListSchema,
   AttachmentResponseSchema,
+  AttachmentReferenceSchema,
+  ListAttachmentReferencesResponseSchema,
+  ListFileResourcesResponseSchema,
   CancelTaskResponseSchema,
   ChatDraftRestoresResponseSchema,
   ChildIssuesResponseSchema,
@@ -215,6 +221,8 @@ import {
   EMPTY_AGENT_TEMPLATE_SUMMARY_LIST,
   EMPTY_APP_CONFIG,
   EMPTY_ATTACHMENT,
+  EMPTY_LIST_ATTACHMENT_REFERENCES_RESPONSE,
+  EMPTY_LIST_FILE_RESOURCES_RESPONSE,
   EMPTY_CLOUD_RUNTIME_NODE,
   EMPTY_CLOUD_RUNTIME_NODE_LIST,
   EMPTY_CREATE_AGENT_FROM_TEMPLATE_RESPONSE,
@@ -2223,6 +2231,117 @@ export class ApiClient {
     return parseWithFallback(raw, AttachmentResponseSchema, EMPTY_ATTACHMENT, {
       endpoint: "POST /api/upload-file",
     });
+  }
+
+  async listFileResources(params?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<ListFileResourcesResponse> {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.offset) query.set("offset", String(params.offset));
+    const suffix = query.size > 0 ? `?${query.toString()}` : "";
+    const raw = await this.fetch<unknown>(`/api/files${suffix}`);
+    return parseWithFallback(
+      raw,
+      ListFileResourcesResponseSchema,
+      EMPTY_LIST_FILE_RESOURCES_RESPONSE,
+      { endpoint: "GET /api/files" },
+    );
+  }
+
+  async listProjectFiles(
+    projectId: string,
+    params?: { limit?: number; offset?: number },
+  ): Promise<ListFileResourcesResponse> {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.offset) query.set("offset", String(params.offset));
+    const suffix = query.size > 0 ? `?${query.toString()}` : "";
+    const raw = await this.fetch<unknown>(
+      `/api/projects/${projectId}/files${suffix}`,
+    );
+    return parseWithFallback(
+      raw,
+      ListFileResourcesResponseSchema,
+      EMPTY_LIST_FILE_RESOURCES_RESPONSE,
+      { endpoint: "GET /api/projects/{id}/files" },
+    );
+  }
+
+  async listAttachmentReferences(
+    attachmentId: string,
+  ): Promise<ListAttachmentReferencesResponse> {
+    const raw = await this.fetch<unknown>(
+      `/api/attachments/${attachmentId}/references`,
+    );
+    return parseWithFallback(
+      raw,
+      ListAttachmentReferencesResponseSchema,
+      EMPTY_LIST_ATTACHMENT_REFERENCES_RESPONSE,
+      { endpoint: "GET /api/attachments/{id}/references" },
+    );
+  }
+
+  async listWorkspaceAttachmentReferences(): Promise<ListAttachmentReferencesResponse> {
+    const raw = await this.fetch<unknown>("/api/files/references");
+    return parseWithFallback(
+      raw,
+      ListAttachmentReferencesResponseSchema,
+      EMPTY_LIST_ATTACHMENT_REFERENCES_RESPONSE,
+      { endpoint: "GET /api/files/references" },
+    );
+  }
+
+  async listTargetAttachmentReferences(
+    targetType: "issue" | "project",
+    targetId: string,
+  ): Promise<ListAttachmentReferencesResponse> {
+    const collection = targetType === "issue" ? "tasks" : "projects";
+    const raw = await this.fetch<unknown>(
+      `/api/${collection}/${targetId}/attachment-references`,
+    );
+    return parseWithFallback(
+      raw,
+      ListAttachmentReferencesResponseSchema,
+      EMPTY_LIST_ATTACHMENT_REFERENCES_RESPONSE,
+      { endpoint: `GET /api/${collection}/{id}/attachment-references` },
+    );
+  }
+
+  async createAttachmentReference(
+    targetType: "issue" | "project",
+    targetId: string,
+    attachmentId: string,
+  ): Promise<AttachmentReference> {
+    const raw = await this.fetch<unknown>(
+      `/api/${targetType === "issue" ? "tasks" : "projects"}/${targetId}/attachment-references`,
+      { method: "POST", body: JSON.stringify({ attachment_id: attachmentId }) },
+    );
+    return parseWithFallback(raw, AttachmentReferenceSchema, {
+      id: "",
+      workspace_id: "",
+      attachment_id: attachmentId,
+      target_type: targetType,
+      target_id: targetId,
+      created_by: "",
+      created_at: "",
+      target_title: null,
+      target_issue_number: null,
+      target_project_id: null,
+      target_project_title: null,
+    }, { endpoint: "POST attachment reference" });
+  }
+
+  async deleteAttachmentReference(
+    targetType: "issue" | "project",
+    targetId: string,
+    attachmentId: string,
+  ): Promise<void> {
+    await this.fetch(
+      `/api/${targetType === "issue" ? "tasks" : "projects"}/${targetId}/attachment-references/${attachmentId}`,
+      { method: "DELETE" },
+    );
   }
 
   // Chat Sessions

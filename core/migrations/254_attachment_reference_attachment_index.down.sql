@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS attachment_reference_attachment_idx;

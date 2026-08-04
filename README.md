@@ -88,6 +88,23 @@ either dimension.
 > for protocol compatibility. This is an implementation detail, not a separate
 > product concept.
 
+### Shared file resources
+
+- Files uploaded to a Task are durable Space resources; temporary files
+  uploaded only inside a conversation are intentionally excluded.
+- The Space resource page groups files by their source Project and shows every
+  Project or Task that currently references each file.
+- Each Project has an independent file view combining files from its Tasks with
+  files referenced directly by the Project.
+- A Task can reference an existing Space file without creating a duplicate.
+  The comment composer provides a searchable, multi-select reference picker and
+  inserts the selected files as file cards in the draft.
+- Image, PDF, audio, video, Markdown, HTML, and text resources can be opened in
+  a dedicated preview tab; other files remain directly downloadable.
+- Reference creation and removal follow Space membership and Project management
+  permissions, while referenced source files are protected from accidental
+  deletion.
+
 ### SOP, Workflow, and Stage
 
 - Space-scoped reusable SOP definitions with draft, published, and archived

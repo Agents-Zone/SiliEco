@@ -12,16 +12,21 @@ import { useT } from "../../i18n";
 import { CommentTriggerChips } from "./comment-trigger-chips";
 import { useCommentTriggerPreview } from "../hooks/use-comment-trigger-preview";
 import { useCommentUploads } from "./use-comment-uploads";
+import { AttachExistingFileButton } from "../../resources/resources-page";
+import { escapeMarkdownLabel } from "../../editor/utils/escape-markdown-label";
+import type { FileResource } from "@silieco/core/types";
 
 interface CommentInputProps {
   issueId: string;
+  workspaceId?: string;
+  projectId?: string | null;
   /** Resolves true on success, false on failure. The composer keeps the text
    *  (editor locked + button spinning) until this settles, then clears only on
    *  success — a failed send must not silently discard the user's draft. */
   onSubmit: (content: string, attachmentIds?: string[], suppressAgentIds?: string[]) => Promise<boolean>;
 }
 
-function CommentInput({ issueId, onSubmit }: CommentInputProps) {
+function CommentInput({ issueId, workspaceId, projectId, onSubmit }: CommentInputProps) {
   const { t } = useT("issues");
   const { t: tEditor } = useT("editor");
   const sendShortcut = useShortcut("send");
@@ -74,6 +79,36 @@ function CommentInput({ issueId, onSubmit }: CommentInputProps) {
   // Flush on every onUpdate (debounced upstream) + visibilitychange/pagehide
   // so tab close / mobile background doesn't lose work. Cleared on submit.
   const setDraft = useCommentDraftStore((s) => s.setDraft);
+  const pendingReferenceMarkdownRef = useRef("");
+
+  const insertReferencedFiles = useCallback((files: FileResource[]) => {
+    const markdown = files
+      .map((file) => {
+        const url = file.markdown_url || file.download_url || file.url;
+        return `!file[${escapeMarkdownLabel(file.filename)}](${url})`;
+      })
+      .join("\n\n");
+    if (!markdown) return;
+
+    // Read the live editor first: React state is intentionally debounced and
+    // may trail a final keystroke when the picker opens.
+    const currentMarkdown = editorRef.current?.getMarkdown() ?? content;
+    const fragment = `${currentMarkdown.trim() ? "\n\n" : ""}${markdown}`;
+    if (editorRef.current?.insertMarkdownAtEnd(fragment)) return;
+
+    pendingReferenceMarkdownRef.current += fragment;
+    setIsEmpty(false);
+    lazy.activate();
+  }, [content, lazy]);
+
+  useEffect(() => {
+    if (!lazy.ready || !pendingReferenceMarkdownRef.current) return;
+    const markdown = pendingReferenceMarkdownRef.current;
+    if (editorRef.current?.insertMarkdownAtEnd(markdown)) {
+      pendingReferenceMarkdownRef.current = "";
+    }
+  }, [lazy.ready]);
+
   useEffect(() => {
     const flush = () => {
       const md = editorRef.current?.getMarkdown();
@@ -254,7 +289,7 @@ function CommentInput({ issueId, onSubmit }: CommentInputProps) {
           </div>
         </div>
       )}
-      <div className="absolute bottom-1 left-2 right-28 min-w-0">
+      <div className="absolute bottom-1 left-2 right-36 min-w-0">
         <CommentTriggerChips
           agents={triggerPreview.agents}
           blocked={triggerPreview.blocked}
@@ -264,6 +299,16 @@ function CommentInput({ issueId, onSubmit }: CommentInputProps) {
         />
       </div>
       <div className="absolute bottom-1 right-1.5 flex items-center gap-1">
+        {workspaceId ? (
+          <AttachExistingFileButton
+            workspaceId={workspaceId}
+            targetType="issue"
+            targetId={issueId}
+            contextProjectId={projectId}
+            compact
+            onReferenced={insertReferencedFiles}
+          />
+        ) : null}
         <FileUploadButton
           size="sm"
           multiple

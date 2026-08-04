@@ -31,6 +31,7 @@ import { SquadsPage, SquadDetailPage as SquadDetailPageView } from "@silieco/vie
 import { InboxPage } from "@silieco/views/inbox";
 import { ChatPage } from "@silieco/views/chat";
 import { SettingsPage } from "@silieco/views/settings";
+import { ResourcesPage } from "@silieco/views/resources";
 import { useT } from "@silieco/views/i18n";
 import { Download, Server } from "lucide-react";
 import { DaemonSettingsTab } from "./components/daemon-settings-tab";
@@ -162,6 +163,11 @@ export const appRoutes: RouteObject[] = [
             path: "projects/:id",
             element: <ProjectDetailPage />,
             handle: { title: "Project" },
+          },
+          {
+            path: "resources",
+            element: <ResourcesPage />,
+            handle: { title: "Resources" },
           },
           {
             path: "workflows",

@@ -389,6 +389,53 @@ export const EMPTY_ATTACHMENT: Attachment = {
   created_at: "",
 };
 
+export const FileResourceSchema = AttachmentResponseSchema.extend({
+  workspace_id: z.string(),
+  issue_id: z.string().nullable().optional().default(null),
+  comment_id: z.string().nullable().optional().default(null),
+  uploader_type: z.string().optional().default(""),
+  uploader_id: z.string().optional().default(""),
+  content_type: z.string().optional().default("application/octet-stream"),
+  size_bytes: z.number().optional().default(0),
+  created_at: z.string(),
+  source_issue_title: z.string().nullable().optional().default(null),
+  source_issue_number: z.number().nullable().optional().default(null),
+  source_project_id: z.string().nullable().optional().default(null),
+  source_project_title: z.string().nullable().optional().default(null),
+  reference_count: z.number().optional().default(0),
+}).loose();
+
+export const ListFileResourcesResponseSchema = z.object({
+  files: z.array(FileResourceSchema).default([]),
+  total: z.number().default(0),
+}).loose();
+
+export const EMPTY_LIST_FILE_RESOURCES_RESPONSE = { files: [], total: 0 };
+
+export const AttachmentReferenceSchema = z.object({
+  id: z.string(),
+  workspace_id: z.string(),
+  attachment_id: z.string(),
+  target_type: z.enum(["issue", "project"]),
+  target_id: z.string(),
+  created_by: z.string(),
+  created_at: z.string(),
+  target_title: z.string().nullable().optional().default(null),
+  target_issue_number: z.number().nullable().optional().default(null),
+  target_project_id: z.string().nullable().optional().default(null),
+  target_project_title: z.string().nullable().optional().default(null),
+}).loose();
+
+export const ListAttachmentReferencesResponseSchema = z.object({
+  references: z.array(AttachmentReferenceSchema).default([]),
+  total: z.number().default(0),
+}).loose();
+
+export const EMPTY_LIST_ATTACHMENT_REFERENCES_RESPONSE = {
+  references: [],
+  total: 0,
+};
+
 // All object schemas use `.loose()` so unknown server-side fields pass
 // through unchanged. zod 4's `.object()` defaults to STRIP, which would
 // silently drop new fields and surface as a "field neither showed up in

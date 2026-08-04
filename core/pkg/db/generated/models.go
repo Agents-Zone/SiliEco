@@ -178,6 +178,16 @@ type Attachment struct {
 	TaskID        pgtype.UUID        `json:"task_id"`
 }
 
+type AttachmentReference struct {
+	ID           pgtype.UUID        `json:"id"`
+	WorkspaceID  pgtype.UUID        `json:"workspace_id"`
+	AttachmentID pgtype.UUID        `json:"attachment_id"`
+	TargetType   string             `json:"target_type"`
+	TargetID     pgtype.UUID        `json:"target_id"`
+	CreatedBy    pgtype.UUID        `json:"created_by"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
 type Autopilot struct {
 	ID                 pgtype.UUID        `json:"id"`
 	WorkspaceID        pgtype.UUID        `json:"workspace_id"`

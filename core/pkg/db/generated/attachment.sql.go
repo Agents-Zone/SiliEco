@@ -640,9 +640,19 @@ func (q *Queries) ListAttachmentsByIDs(ctx context.Context, arg ListAttachmentsB
 }
 
 const listAttachmentsByIssue = `-- name: ListAttachmentsByIssue :many
-SELECT id, workspace_id, issue_id, comment_id, uploader_type, uploader_id, filename, url, content_type, size_bytes, created_at, chat_session_id, chat_message_id, task_id FROM attachment
-WHERE issue_id = $1 AND workspace_id = $2
-ORDER BY created_at ASC
+SELECT a.id, a.workspace_id, a.issue_id, a.comment_id, a.uploader_type, a.uploader_id, a.filename, a.url, a.content_type, a.size_bytes, a.created_at, a.chat_session_id, a.chat_message_id, a.task_id FROM attachment a
+WHERE a.workspace_id = $2
+  AND (
+      a.issue_id = $1
+      OR EXISTS (
+          SELECT 1 FROM attachment_reference ar
+          WHERE ar.workspace_id = a.workspace_id
+            AND ar.attachment_id = a.id
+            AND ar.target_type = 'issue'
+            AND ar.target_id = $1
+      )
+  )
+ORDER BY a.created_at ASC
 `
 
 type ListAttachmentsByIssueParams struct {

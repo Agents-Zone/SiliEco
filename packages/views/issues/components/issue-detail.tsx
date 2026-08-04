@@ -70,6 +70,7 @@ import { collectThreadReplies, deriveThreadResolution } from "./thread-utils";
 import { IssueAgentHeaderChip } from "./issue-agent-header-chip";
 import { ExecutionLogSection } from "./execution-log-section";
 import { PullRequestList } from "./pull-request-list";
+import { AttachExistingFileButton, IssueFilesSection } from "../../resources";
 import { useGitHubSettings } from "@silieco/core/github";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@silieco/core/auth";
@@ -2013,6 +2014,8 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
         </div>
       )}
 
+      <IssueFilesSection issueId={id} />
+
       {/* Pull requests — hidden when the workspace disables the PR sidebar
           (or the GitHub master switch is off). Backend data is kept either
           way so re-enabling restores the section instantly. */}
@@ -2246,6 +2249,12 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
                 it never overlaps the title (which truncates to make room).
                 It self-hides when no agent is active. */}
             <IssueAgentHeaderChip issueId={id} />
+            <AttachExistingFileButton
+              workspaceId={wsId}
+              targetType="issue"
+              targetId={id}
+              contextProjectId={issue.project_id}
+            />
             {onDone && issue.status !== "done" && issue.status !== "cancelled" && (
               <Tooltip>
                 <TooltipTrigger
@@ -2727,7 +2736,13 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
                 keeps the previous issue's in-memory content and the
                 next keystroke would flush it into the new issue's
                 draft key. */}
-            <CommentInput key={id} issueId={id} onSubmit={submitComment} />
+            <CommentInput
+              key={id}
+              issueId={id}
+              workspaceId={wsId}
+              projectId={issue.project_id}
+              onSubmit={submitComment}
+            />
           </div>
         </div>
         </div>

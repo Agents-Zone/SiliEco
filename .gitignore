@@ -32,6 +32,7 @@ coverage.out
 
 # Local runtime data
 .data/
+/core/data/
 *.db
 *.db-shm
 *.db-wal

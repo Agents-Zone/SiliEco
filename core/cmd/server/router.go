@@ -1150,6 +1150,9 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Post("/reactions", h.AddIssueReaction)
 					r.Delete("/reactions", h.RemoveIssueReaction)
 					r.Get("/attachments", h.ListAttachments)
+					r.Get("/attachment-references", h.ListIssueAttachmentReferences)
+					r.Post("/attachment-references", h.CreateIssueAttachmentReference)
+					r.Delete("/attachment-references/{attachmentId}", h.DeleteIssueAttachmentReference)
 					r.Get("/children", h.ListChildIssues)
 					r.Get("/labels", h.ListLabelsForIssue)
 					r.Post("/labels", h.AttachLabel)
@@ -1168,6 +1171,8 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			r.Route("/api/issues", func(r chi.Router) {
 				mountTaskRoutes(r, false)
 			})
+			r.Get("/api/files", h.ListWorkspaceFileResources)
+			r.Get("/api/files/references", h.ListWorkspaceAttachmentReferences)
 
 			// Agent execution messages. `/api/tasks` is retained for old clients;
 			// new clients call the unambiguous Run route.
@@ -1208,6 +1213,10 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 					r.Post("/resources", h.CreateProjectResource)
 					r.Put("/resources/{resourceId}", h.UpdateProjectResource)
 					r.Delete("/resources/{resourceId}", h.DeleteProjectResource)
+					r.Get("/files", h.ListProjectFileResources)
+					r.Get("/attachment-references", h.ListProjectAttachmentReferences)
+					r.Post("/attachment-references", h.CreateProjectAttachmentReference)
+					r.Delete("/attachment-references/{attachmentId}", h.DeleteProjectAttachmentReference)
 				})
 			})
 
@@ -1300,6 +1309,7 @@ func NewRouterWithOptions(pool *pgxpool.Pool, hub *realtime.Hub, bus *events.Bus
 			// (SILI-3130). The handler self-resolves the workspace
 			// from the attachment row.
 			r.Get("/api/attachments/{id}/content", h.GetAttachmentContent)
+			r.Get("/api/attachments/{id}/references", h.ListAttachmentReferences)
 			r.Delete("/api/attachments/{id}", h.DeleteAttachment)
 
 			// Comments

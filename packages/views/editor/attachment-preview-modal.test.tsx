@@ -126,6 +126,7 @@ vi.mock("../i18n", () => ({
 
 import {
   AttachmentPreviewModal,
+  AttachmentStandalonePreview,
   useAttachmentPreview,
 } from "./attachment-preview-modal";
 import { renderHook, act as hookAct } from "@testing-library/react";
@@ -185,6 +186,14 @@ afterEach(() => {
 });
 
 describe("AttachmentPreviewModal — dispatch", () => {
+  it("uses the image dispatcher in the standalone preview page", () => {
+    const att = makeAttachment({ filename: "shot.png", content_type: "image/png" });
+    render(<AttachmentStandalonePreview attachment={att} />);
+    const img = document.querySelector("img");
+    expect(img?.getAttribute("src")).toBe(att.download_url);
+    expect(screen.queryByText("Couldn't load preview")).toBeNull();
+  });
+
   it("renders an <img> centered in the modal for image content types", () => {
     const att = makeAttachment({ filename: "shot.png", content_type: "image/png" });
     render(<AttachmentPreviewModal source={{ kind: "full", attachment: att }} open onClose={() => {}} />);

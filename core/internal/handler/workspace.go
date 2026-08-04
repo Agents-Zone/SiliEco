@@ -807,6 +807,10 @@ func (h *Handler) DeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 
 	// At this point workspaceMember has resolved → workspaceID is a valid UUID
 	// (the lookup would have errored otherwise), so reuse the resolved value.
+	if err := qtx.DeleteAttachmentReferencesByWorkspace(r.Context(), requester.WorkspaceID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to delete workspace file references")
+		return
+	}
 	if err := qtx.DeleteWorkspace(r.Context(), requester.WorkspaceID); err != nil {
 		slog.Warn("delete workspace failed", append(logger.RequestAttrs(r), "error", err, "workspace_id", workspaceID)...)
 		writeError(w, http.StatusInternalServerError, "failed to delete workspace")

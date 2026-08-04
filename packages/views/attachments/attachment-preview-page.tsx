@@ -1,27 +1,21 @@
 "use client";
 
 /**
- * AttachmentPreviewPage — full-page HTML attachment viewer.
+ * AttachmentPreviewPage — full-page attachment viewer.
  *
- * Destination for `openInNewTab` from HtmlAttachmentPreview's toolbar. The
- * inline preview (HtmlAttachmentPreview) renders the same content in a 480px
- * card with a hover toolbar; this is the same content edge-to-edge so the
- * user can resize / interact with the document at full size.
- *
- * Same security posture as the inline preview: iframe sandbox is
- * "allow-scripts" only — no allow-same-origin, no allow-top-navigation. The
- * iframe runs in an opaque origin and cannot reach cookies, localStorage,
- * parent, or top-level navigation.
+ * Loads attachment metadata first, then delegates to the same kind dispatcher
+ * as the modal preview: image, PDF, audio/video, Markdown, HTML, or text.
  *
  * The route is workspace-scoped (`/{slug}/attachments/{id}/preview`) for
- * tenancy isolation; the `/api/attachments/{id}/content` proxy itself is
- * already auth-checked, so the slug is purely a URL contract.
+ * tenancy isolation. Text-backed previews use the auth-checked `/content`
+ * proxy; media previews use the attachment's resolved media URL.
  */
 
 import { useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@silieco/core/api";
 import { useT } from "../i18n";
-import { useAttachmentHtmlText } from "../editor/hooks/use-attachment-html-text";
-import { withFragmentNavShim } from "../editor/utils/iframe-fragment-nav";
+import { AttachmentStandalonePreview } from "../editor/attachment-preview-modal";
 
 interface AttachmentPreviewPageProps {
   attachmentId: string;
@@ -35,17 +29,21 @@ export function AttachmentPreviewPage({
   filename,
 }: AttachmentPreviewPageProps) {
   const { t } = useT("editor");
-  const query = useAttachmentHtmlText(attachmentId);
+  const query = useQuery({
+    queryKey: ["attachment", attachmentId] as const,
+    queryFn: () => api.getAttachment(attachmentId),
+    retry: false,
+  });
+  const displayName = filename || query.data?.filename;
 
   // Set document.title so desktop's MutationObserver-based tab title picks
   // up the filename. Web shows the same string in the browser tab.
   useEffect(() => {
-    if (filename) document.title = filename;
-  }, [filename]);
+    if (displayName) document.title = displayName;
+  }, [displayName]);
 
-  const text = query.data?.text;
   const isLoading = query.isLoading;
-  const isError = !isLoading && (!!query.error || !text);
+  const isError = !isLoading && (!!query.error || !query.data?.id);
 
   return (
     <div className="flex h-full w-full flex-col bg-background">
@@ -60,14 +58,11 @@ export function AttachmentPreviewPage({
         >
           {t(($) => $.attachment.preview_failed)}
         </div>
-      ) : (
-        <iframe
-          srcDoc={withFragmentNavShim(text)}
-          sandbox="allow-scripts"
-          title={filename ?? "HTML attachment"}
-          className="flex-1 w-full border-0 bg-background"
+      ) : query.data ? (
+        <AttachmentStandalonePreview
+          attachment={displayName ? { ...query.data, filename: displayName } : query.data}
         />
-      )}
+      ) : null}
     </div>
   );
 }

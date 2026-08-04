@@ -26,6 +26,7 @@ function workspaceScoped(slug: string) {
     /** @deprecated Use taskDetail(). Kept for source compatibility. */
     issueDetail: (id: string) => `${ws}/tasks/${encode(id)}`,
     projects: () => `${ws}/projects`,
+    resources: () => `${ws}/resources`,
     projectDetail: (id: string) => `${ws}/projects/${encode(id)}`,
     workflows: () => `${ws}/workflows`,
     workflowDetail: (id: string) => `${ws}/workflows/${encode(id)}`,

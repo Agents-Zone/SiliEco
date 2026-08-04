@@ -234,6 +234,30 @@ func (h *Handler) loadProjectForResource(w http.ResponseWriter, r *http.Request,
 	return project, true
 }
 
+// requireProjectResourceManager protects execution-affecting project resources.
+// Workspace owners/admins and the member project lead may manage them; task
+// tokens are always read-only here so an executing agent cannot redirect future
+// runs to a different repository or local directory.
+func (h *Handler) requireProjectResourceManager(w http.ResponseWriter, r *http.Request, project db.Project) bool {
+	if r.Header.Get("X-Actor-Source") == "task_token" {
+		writeError(w, http.StatusForbidden, "agent tasks cannot manage project resources")
+		return false
+	}
+	member, ok := h.workspaceMember(w, r, uuidToString(project.WorkspaceID))
+	if !ok {
+		return false
+	}
+	if member.Role == "owner" || member.Role == "admin" {
+		return true
+	}
+	if project.LeadType.Valid && project.LeadType.String == "member" &&
+		project.LeadID.Valid && uuidToString(project.LeadID) == uuidToString(member.UserID) {
+		return true
+	}
+	writeError(w, http.StatusForbidden, "only workspace admins or the project lead can manage project resources")
+	return false
+}
+
 // ListProjectResources returns the resources attached to a project.
 func (h *Handler) ListProjectResources(w http.ResponseWriter, r *http.Request) {
 	project, ok := h.loadProjectForResource(w, r, chi.URLParam(r, "id"))
@@ -256,6 +280,9 @@ func (h *Handler) ListProjectResources(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) CreateProjectResource(w http.ResponseWriter, r *http.Request) {
 	project, ok := h.loadProjectForResource(w, r, chi.URLParam(r, "id"))
 	if !ok {
+		return
+	}
+	if !h.requireProjectResourceManager(w, r, project) {
 		return
 	}
 	userID, ok := requireUserID(w, r)
@@ -338,6 +365,9 @@ func (h *Handler) CreateProjectResource(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) UpdateProjectResource(w http.ResponseWriter, r *http.Request) {
 	project, ok := h.loadProjectForResource(w, r, chi.URLParam(r, "id"))
 	if !ok {
+		return
+	}
+	if !h.requireProjectResourceManager(w, r, project) {
 		return
 	}
 	resourceUUID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "resourceId"), "resource id")
@@ -491,6 +521,9 @@ func (h *Handler) findLocalDirectoryConflict(ctx context.Context, projectID pgty
 func (h *Handler) DeleteProjectResource(w http.ResponseWriter, r *http.Request) {
 	project, ok := h.loadProjectForResource(w, r, chi.URLParam(r, "id"))
 	if !ok {
+		return
+	}
+	if !h.requireProjectResourceManager(w, r, project) {
 		return
 	}
 	resourceUUID, ok := parseUUIDOrBadRequest(w, chi.URLParam(r, "resourceId"), "resource id")
