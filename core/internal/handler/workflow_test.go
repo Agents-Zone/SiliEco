@@ -25,6 +25,8 @@ func cleanupWorkflowTestData(t *testing.T) {
 		ctx := context.Background()
 		testPool.Exec(ctx, `UPDATE issue SET workflow_instance_id = NULL, workflow_stage_id = NULL WHERE workspace_id = $1`, testWorkspaceID)
 		testPool.Exec(ctx, `DELETE FROM workflow_gate_decision WHERE workspace_id = $1`, testWorkspaceID)
+		testPool.Exec(ctx, `DELETE FROM workflow_instance_change WHERE workspace_id = $1`, testWorkspaceID)
+		testPool.Exec(ctx, `DELETE FROM workflow_instance_stage WHERE workspace_id = $1`, testWorkspaceID)
 		testPool.Exec(ctx, `DELETE FROM workflow_instance WHERE workspace_id = $1`, testWorkspaceID)
 		testPool.Exec(ctx, `DELETE FROM workflow_stage WHERE workspace_id = $1`, testWorkspaceID)
 		testPool.Exec(ctx, `DELETE FROM workflow_version WHERE workspace_id = $1`, testWorkspaceID)
@@ -81,6 +83,147 @@ func TestValidateWorkflowGateActorUsesConfiguredDecider(t *testing.T) {
 		Type: "agent", Decider: "agent-1",
 	}, "agent", "agent-2"); err == nil {
 		t.Fatal("a different agent must not be allowed through a specific agent gate")
+	}
+}
+
+func TestWorkflowInstancePlanCanAdjustCurrentAndEmptyFutureStages(t *testing.T) {
+	if testHandler == nil || testPool == nil {
+		t.Skip("database not available")
+	}
+	cleanupWorkflowTestData(t)
+
+	var projectID string
+	if err := testPool.QueryRow(context.Background(), `
+		INSERT INTO project (workspace_id, title)
+		VALUES ($1, 'Adjustable SOP project')
+		RETURNING id
+	`, testWorkspaceID).Scan(&projectID); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	t.Cleanup(func() {
+		testPool.Exec(context.Background(), `DELETE FROM project WHERE id = $1`, projectID)
+	})
+
+	createWorkflow := httptest.NewRecorder()
+	testHandler.CreateWorkflow(createWorkflow, newRequest(http.MethodPost, "/api/workflows", map[string]any{
+		"name": "Adjustable SOP", "project_id": projectID, "publish": true,
+		"stages": []map[string]any{
+			{"name": "Plan"},
+			{"name": "Build", "output_spec": map[string]any{"default_artifact": "build.md"}},
+			{"name": "Unused review"},
+		},
+	}))
+	if createWorkflow.Code != http.StatusCreated {
+		t.Fatalf("create workflow: status=%d body=%s", createWorkflow.Code, createWorkflow.Body.String())
+	}
+	var workflow WorkflowResponse
+	if err := json.Unmarshal(createWorkflow.Body.Bytes(), &workflow); err != nil {
+		t.Fatalf("decode workflow: %v", err)
+	}
+
+	createRun := httptest.NewRecorder()
+	testHandler.CreateWorkflowInstance(createRun, workflowRequest(
+		http.MethodPost,
+		"/api/workflows/"+workflow.ID+"/instances",
+		map[string]any{"title": "Original run", "start": true},
+		map[string]string{"id": workflow.ID},
+	))
+	if createRun.Code != http.StatusCreated {
+		t.Fatalf("create run: status=%d body=%s", createRun.Code, createRun.Body.String())
+	}
+	var run WorkflowInstanceResponse
+	if err := json.Unmarshal(createRun.Body.Bytes(), &run); err != nil {
+		t.Fatalf("decode run: %v", err)
+	}
+	if len(run.Stages) != 3 || run.Revision != 1 {
+		t.Fatalf("unexpected initial run plan: %#v", run)
+	}
+	stages := append([]WorkflowInstanceStageResponse(nil), run.Stages[:2]...)
+	stages[0].Name = "Plan and align"
+	stages[1].OutputSpec = json.RawMessage(`{"default_artifact":"release.md"}`)
+
+	adjust := httptest.NewRecorder()
+	testHandler.UpdateWorkflowInstancePlan(adjust, workflowRequest(
+		http.MethodPatch,
+		"/api/workflow-instances/"+run.ID+"/plan",
+		map[string]any{
+			"expected_revision": 1,
+			"title":             "Adjusted run",
+			"change_note":       "Remove the unused review stage",
+			"stages":            stages,
+		},
+		map[string]string{"id": run.ID},
+	))
+	if adjust.Code != http.StatusOK {
+		t.Fatalf("adjust run: status=%d body=%s", adjust.Code, adjust.Body.String())
+	}
+	var adjusted WorkflowInstanceResponse
+	if err := json.Unmarshal(adjust.Body.Bytes(), &adjusted); err != nil {
+		t.Fatalf("decode adjusted run: %v", err)
+	}
+	if adjusted.Revision != 2 || adjusted.Title != "Adjusted run" || len(adjusted.Stages) != 2 {
+		t.Fatalf("unexpected adjusted run: %#v", adjusted)
+	}
+	if adjusted.Stages[0].Name != "Plan and align" || string(adjusted.Stages[1].OutputSpec) != `{"default_artifact":"release.md"}` {
+		t.Fatalf("stage adjustments were not preserved: %#v", adjusted.Stages)
+	}
+	if len(adjusted.Changes) != 1 || adjusted.Changes[0].Revision != 2 {
+		t.Fatalf("plan change must be audited: %#v", adjusted.Changes)
+	}
+
+	stale := httptest.NewRecorder()
+	testHandler.UpdateWorkflowInstancePlan(stale, workflowRequest(
+		http.MethodPatch,
+		"/api/workflow-instances/"+run.ID+"/plan",
+		map[string]any{"expected_revision": 1, "title": "Stale", "stages": adjusted.Stages},
+		map[string]string{"id": run.ID},
+	))
+	if stale.Code != http.StatusConflict {
+		t.Fatalf("stale revision must be rejected, got %d: %s", stale.Code, stale.Body.String())
+	}
+
+	advance := httptest.NewRecorder()
+	testHandler.TransitionWorkflowInstance(advance, workflowRequest(
+		http.MethodPost,
+		"/api/workflow-instances/"+run.ID+"/transition",
+		map[string]any{"outcome": "approved"},
+		map[string]string{"id": run.ID},
+	))
+	if advance.Code != http.StatusOK {
+		t.Fatalf("advance run: status=%d body=%s", advance.Code, advance.Body.String())
+	}
+	adjusted.Stages[0].Name = "Rewrite history"
+	locked := httptest.NewRecorder()
+	testHandler.UpdateWorkflowInstancePlan(locked, workflowRequest(
+		http.MethodPatch,
+		"/api/workflow-instances/"+run.ID+"/plan",
+		map[string]any{"expected_revision": 2, "title": adjusted.Title, "stages": adjusted.Stages},
+		map[string]string{"id": run.ID},
+	))
+	if locked.Code != http.StatusConflict {
+		t.Fatalf("completed stage must remain locked, got %d: %s", locked.Code, locked.Body.String())
+	}
+
+	deleteProject := httptest.NewRecorder()
+	testHandler.DeleteProject(deleteProject, workflowRequest(
+		http.MethodDelete,
+		"/api/projects/"+projectID,
+		nil,
+		map[string]string{"id": projectID},
+	))
+	if deleteProject.Code != http.StatusNoContent {
+		t.Fatalf("delete project: status=%d body=%s", deleteProject.Code, deleteProject.Body.String())
+	}
+	var remainingStages, remainingChanges int
+	if err := testPool.QueryRow(context.Background(), `
+		SELECT
+			(SELECT count(*) FROM workflow_instance_stage WHERE workflow_instance_id = $1),
+			(SELECT count(*) FROM workflow_instance_change WHERE workflow_instance_id = $1)
+	`, run.ID).Scan(&remainingStages, &remainingChanges); err != nil {
+		t.Fatalf("count deleted run plan records: %v", err)
+	}
+	if remainingStages != 0 || remainingChanges != 0 {
+		t.Fatalf("project deletion left run plan data: stages=%d changes=%d", remainingStages, remainingChanges)
 	}
 }
 
@@ -180,8 +323,11 @@ func TestWorkflowLifecycleKeepsTaskStatusAndStageIndependent(t *testing.T) {
 	if err := json.Unmarshal(createInstance.Body.Bytes(), &instance); err != nil {
 		t.Fatalf("decode instance: %v", err)
 	}
-	firstStage := workflow.CurrentVersion.Stages[0]
-	secondStage := workflow.CurrentVersion.Stages[1]
+	if len(instance.Stages) != 2 {
+		t.Fatalf("expected an independent two-stage run plan: %#v", instance)
+	}
+	firstStage := instance.Stages[0]
+	secondStage := instance.Stages[1]
 	if instance.CurrentStageID == nil || *instance.CurrentStageID != firstStage.ID {
 		t.Fatalf("expected instance to start at first stage: %#v", instance)
 	}

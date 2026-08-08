@@ -175,6 +175,7 @@ import type {
   CreateWorkflowVersionRequest,
   CreateWorkflowInstanceRequest,
   TransitionWorkflowInstanceRequest,
+  UpdateWorkflowInstancePlanRequest,
   ListWorkflowsResponse,
   ListWorkflowVersionsResponse,
   ListWorkflowInstancesResponse,
@@ -332,6 +333,10 @@ import {
   EMPTY_LIST_GITHUB_REPOSITORIES_RESPONSE,
   RuntimeModelListRequestSchema,
   MALFORMED_RUNTIME_MODEL_LIST_REQUEST,
+  ProjectResourceSchema,
+  ListProjectResourcesResponseSchema,
+  EMPTY_PROJECT_RESOURCE,
+  EMPTY_LIST_PROJECT_RESOURCES_RESPONSE,
 } from "./schemas";
 
 /** Identifies the calling client to the server.
@@ -2808,6 +2813,22 @@ export class ApiClient {
     );
   }
 
+  async updateWorkflowInstancePlan(
+    id: string,
+    data: UpdateWorkflowInstancePlanRequest,
+  ): Promise<WorkflowInstance> {
+    const raw = await this.fetch<unknown>(
+      `/api/workflow-instances/${id}/plan`,
+      { method: "PATCH", body: JSON.stringify(data) },
+    );
+    return parseWithFallback(
+      raw,
+      WorkflowInstanceSchema,
+      EMPTY_WORKFLOW_INSTANCE,
+      { endpoint: "PATCH /api/workflow-instances/{id}/plan" },
+    );
+  }
+
   async archiveWorkflowInstance(id: string): Promise<WorkflowInstance> {
     const raw = await this.fetch<unknown>(
       `/api/workflow-instances/${id}/archive`,
@@ -2864,16 +2885,25 @@ export class ApiClient {
   async listProjectResources(
     projectId: string,
   ): Promise<ListProjectResourcesResponse> {
-    return this.fetch(`/api/projects/${projectId}/resources`);
+    const raw = await this.fetch<unknown>(`/api/projects/${projectId}/resources`);
+    return parseWithFallback(
+      raw,
+      ListProjectResourcesResponseSchema,
+      EMPTY_LIST_PROJECT_RESOURCES_RESPONSE,
+      { endpoint: "GET /api/projects/{id}/resources" },
+    );
   }
 
   async createProjectResource(
     projectId: string,
     data: CreateProjectResourceRequest,
   ): Promise<ProjectResource> {
-    return this.fetch(`/api/projects/${projectId}/resources`, {
+    const raw = await this.fetch<unknown>(`/api/projects/${projectId}/resources`, {
       method: "POST",
       body: JSON.stringify(data),
+    });
+    return parseWithFallback(raw, ProjectResourceSchema, EMPTY_PROJECT_RESOURCE, {
+      endpoint: "POST /api/projects/{id}/resources",
     });
   }
 
@@ -2882,9 +2912,12 @@ export class ApiClient {
     resourceId: string,
     data: UpdateProjectResourceRequest,
   ): Promise<ProjectResource> {
-    return this.fetch(`/api/projects/${projectId}/resources/${resourceId}`, {
+    const raw = await this.fetch<unknown>(`/api/projects/${projectId}/resources/${resourceId}`, {
       method: "PUT",
       body: JSON.stringify(data),
+    });
+    return parseWithFallback(raw, ProjectResourceSchema, EMPTY_PROJECT_RESOURCE, {
+      endpoint: "PUT /api/projects/{id}/resources/{resourceId}",
     });
   }
 

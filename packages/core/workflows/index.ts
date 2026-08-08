@@ -15,6 +15,7 @@ export {
   useCreateWorkflowInstance,
   useArchiveWorkflowInstance,
   useTransitionWorkflowInstance,
+  useUpdateWorkflowInstancePlan,
   useAttachWorkflowTask,
   useDetachWorkflowTask,
 } from "./mutations";

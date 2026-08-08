@@ -70,11 +70,15 @@ export interface GithubRepoResourceRef {
   url: string;
   ref?: string;
   default_branch_hint?: string;
+  /** The primary repository supplies the default local cwd for project tasks. */
+  primary?: boolean;
 }
 
 export interface LocalDirectoryResourceRef {
   local_path: string;
   daemon_id: string;
+  /** Parent github_repo project resource for this machine-local checkout. */
+  repository_resource_id?: string;
   label?: string;
 }
 

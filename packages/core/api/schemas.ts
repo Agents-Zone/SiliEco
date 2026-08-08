@@ -38,6 +38,8 @@ import type {
   ListLabelsResponse,
   ListWebhookDeliveriesResponse,
   NotificationPreferenceResponse,
+  ProjectResource,
+  ListProjectResourcesResponse,
   ResourceLabelsResponse,
   RuntimeModelListRequest,
   SearchIssuesResponse,
@@ -112,6 +114,40 @@ export const EMPTY_LIST_GITHUB_REPOSITORIES_RESPONSE: ListGitHubRepositoriesResp
   repositories: [],
   total_count: 0,
   next_page: null,
+};
+
+export const ProjectResourceSchema: z.ZodType<ProjectResource> = z.object({
+  id: z.string(),
+  project_id: z.string(),
+  workspace_id: z.string(),
+  resource_type: z.enum(["github_repo", "local_directory"]),
+  resource_ref: z.record(z.string(), z.unknown()),
+  label: z.string().nullable(),
+  position: z.number(),
+  created_at: z.string(),
+  created_by: z.string().nullable(),
+}).loose() as z.ZodType<ProjectResource>;
+
+export const ListProjectResourcesResponseSchema: z.ZodType<ListProjectResourcesResponse> = z.object({
+  resources: z.array(ProjectResourceSchema).default([]),
+  total: z.number().default(0),
+}).loose();
+
+export const EMPTY_PROJECT_RESOURCE: ProjectResource = {
+  id: "",
+  project_id: "",
+  workspace_id: "",
+  resource_type: "github_repo",
+  resource_ref: {},
+  label: null,
+  position: 0,
+  created_at: "",
+  created_by: null,
+};
+
+export const EMPTY_LIST_PROJECT_RESOURCES_RESPONSE: ListProjectResourcesResponse = {
+  resources: [],
+  total: 0,
 };
 
 export const GitHubPullRequestSchema = z.object({
@@ -687,6 +723,25 @@ export const WorkflowStageSchema = z.object({
   created_at: z.string(),
 }).loose();
 
+export const WorkflowInstanceStageSchema = z.object({
+  id: z.string(),
+  workspace_id: z.string(),
+  workflow_instance_id: z.string().default(""),
+  source_stage_id: z.string().nullable().default(null),
+  stable_key: z.string(),
+  name: z.string(),
+  description: z.string().nullable().default(null),
+  position: z.number(),
+  completion_rule: z.record(z.string(), z.unknown()).default({}),
+  input_spec: z.record(z.string(), z.unknown()).default({}),
+  output_spec: z.record(z.string(), z.unknown()).default({}),
+  required_skills: z.array(z.string()).default([]),
+  gate: z.record(z.string(), z.unknown()).default({ type: "none" }),
+  rollback_stage_key: z.string().nullable().default(null),
+  created_at: z.string(),
+  updated_at: z.string().default(""),
+}).loose();
+
 export const WorkflowVersionSchema = z.object({
   id: z.string(),
   workspace_id: z.string(),
@@ -732,8 +787,14 @@ export const WorkflowInstanceSchema = z.object({
   workflow_version_id: z.string(),
   title: z.string(),
   description: z.string().nullable(),
+  revision: z.number().default(1),
+  can_edit: z.boolean().default(false),
+  source_version: z.number().default(0),
   status: z.string(),
   current_stage_id: z.string().nullable().default(null),
+  current_stage_name: z.string().nullable().default(null),
+  current_stage_index: z.number().nullable().default(null),
+  stage_count: z.number().default(0),
   project_id: z.string().nullable().default(null),
   created_by: z.string(),
   started_at: z.string().nullable().default(null),
@@ -743,9 +804,18 @@ export const WorkflowInstanceSchema = z.object({
   archived_by: z.string().nullable().default(null),
   created_at: z.string(),
   updated_at: z.string(),
-  stages: z.array(WorkflowStageSchema).optional(),
+  stages: z.array(WorkflowInstanceStageSchema).optional(),
   tasks: z.array(IssueSchema).optional(),
   decisions: z.array(WorkflowGateDecisionSchema).optional(),
+  changes: z.array(z.object({
+    id: z.string(),
+    revision: z.number(),
+    changed_by: z.string(),
+    change_note: z.string().nullable().default(null),
+    before_plan: z.record(z.string(), z.unknown()).default({}),
+    after_plan: z.record(z.string(), z.unknown()).default({}),
+    created_at: z.string(),
+  }).loose()).optional(),
 }).loose();
 
 export const ListWorkflowsResponseSchema = z.object({
@@ -800,8 +870,14 @@ export const EMPTY_WORKFLOW_INSTANCE: WorkflowInstance = {
   workflow_version_id: "",
   title: "",
   description: null,
+  revision: 1,
+  can_edit: false,
+  source_version: 0,
   status: "draft",
   current_stage_id: null,
+  current_stage_name: null,
+  current_stage_index: null,
+  stage_count: 0,
   project_id: null,
   created_by: "",
   started_at: null,

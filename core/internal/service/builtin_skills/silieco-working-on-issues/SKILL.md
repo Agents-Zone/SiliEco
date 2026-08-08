@@ -264,6 +264,27 @@ Read each sub-issue's description before promoting and only promote items whose
 stated dependencies are met; if a description conflicts with the parent's
 breakdown, leave it `backlog` and comment to confirm first.
 
+## SOP workflow assignment is an atomic pair
+
+An SOP-bound Task carries both a workflow run UUID and a Stage UUID. Pass the
+coordinates together when creating a Task or attaching an existing Task:
+
+```bash
+silieco task create --title "..." --workflow-instance <run-uuid> --workflow-stage <stage-uuid>
+silieco task update <task-id> --workflow-instance <run-uuid> --workflow-stage <stage-uuid>
+```
+
+The Stage must belong to that workflow run's published version; the server also
+aligns the Task to the run's Project. To detach an existing Task cleanly while
+keeping the Task itself, explicitly clear both coordinates:
+
+```bash
+silieco task update <task-id> --workflow-instance "" --workflow-stage ""
+```
+
+Do not confuse `--workflow-stage <uuid>` with `--stage <N>`: the former places
+a Task in an SOP run; the latter groups sub-tasks into parent wake barriers.
+
 ## Incorrect → correct
 
 PR title (link the issue):

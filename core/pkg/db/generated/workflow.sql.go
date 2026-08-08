@@ -11,6 +11,37 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const archiveWorkflow = `-- name: ArchiveWorkflow :one
+UPDATE workflow SET
+    status = 'archived',
+    updated_at = now()
+WHERE id = $1 AND workspace_id = $2
+RETURNING id, workspace_id, name, description, status, current_version_id, created_by, created_at, updated_at, project_id
+`
+
+type ArchiveWorkflowParams struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) ArchiveWorkflow(ctx context.Context, arg ArchiveWorkflowParams) (Workflow, error) {
+	row := q.db.QueryRow(ctx, archiveWorkflow, arg.ID, arg.WorkspaceID)
+	var i Workflow
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Name,
+		&i.Description,
+		&i.Status,
+		&i.CurrentVersionID,
+		&i.CreatedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ProjectID,
+	)
+	return i, err
+}
+
 const archiveWorkflowInstance = `-- name: ArchiveWorkflowInstance :one
 UPDATE workflow_instance SET
     archived_at = now(),
@@ -19,7 +50,7 @@ UPDATE workflow_instance SET
 WHERE id = $1
   AND workspace_id = $2
   AND archived_at IS NULL
-RETURNING id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by
+RETURNING id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by, revision
 `
 
 type ArchiveWorkflowInstanceParams struct {
@@ -48,37 +79,7 @@ func (q *Queries) ArchiveWorkflowInstance(ctx context.Context, arg ArchiveWorkfl
 		&i.UpdatedAt,
 		&i.ArchivedAt,
 		&i.ArchivedBy,
-	)
-	return i, err
-}
-
-const archiveWorkflow = `-- name: ArchiveWorkflow :one
-UPDATE workflow SET
-    status = 'archived',
-    updated_at = now()
-WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, name, description, status, current_version_id, created_by, created_at, updated_at, project_id
-`
-
-type ArchiveWorkflowParams struct {
-	ID          pgtype.UUID `json:"id"`
-	WorkspaceID pgtype.UUID `json:"workspace_id"`
-}
-
-func (q *Queries) ArchiveWorkflow(ctx context.Context, arg ArchiveWorkflowParams) (Workflow, error) {
-	row := q.db.QueryRow(ctx, archiveWorkflow, arg.ID, arg.WorkspaceID)
-	var i Workflow
-	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
-		&i.Name,
-		&i.Description,
-		&i.Status,
-		&i.CurrentVersionID,
-		&i.CreatedBy,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.ProjectID,
+		&i.Revision,
 	)
 	return i, err
 }
@@ -143,19 +144,42 @@ func (q *Queries) AttachIssueToWorkflowStage(ctx context.Context, arg AttachIssu
 	return i, err
 }
 
-const countOpenIssuesInWorkflowStage = `-- name: CountOpenIssuesInWorkflowStage :one
-SELECT count(*)::bigint
+const countIssuesByWorkflowStage = `-- name: CountIssuesByWorkflowStage :many
+SELECT workflow_stage_id, count(*)::bigint AS task_count
 FROM issue
 WHERE workspace_id = $1
   AND workflow_instance_id = $2
-  AND workflow_stage_id = $3
-  AND status NOT IN ('done', 'cancelled')
+GROUP BY workflow_stage_id
 `
 
-type CountOpenIssuesInWorkflowStageParams struct {
+type CountIssuesByWorkflowStageParams struct {
 	WorkspaceID        pgtype.UUID `json:"workspace_id"`
 	WorkflowInstanceID pgtype.UUID `json:"workflow_instance_id"`
-	WorkflowStageID    pgtype.UUID `json:"workflow_stage_id"`
+}
+
+type CountIssuesByWorkflowStageRow struct {
+	WorkflowStageID pgtype.UUID `json:"workflow_stage_id"`
+	TaskCount       int64       `json:"task_count"`
+}
+
+func (q *Queries) CountIssuesByWorkflowStage(ctx context.Context, arg CountIssuesByWorkflowStageParams) ([]CountIssuesByWorkflowStageRow, error) {
+	rows, err := q.db.Query(ctx, countIssuesByWorkflowStage, arg.WorkspaceID, arg.WorkflowInstanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []CountIssuesByWorkflowStageRow{}
+	for rows.Next() {
+		var i CountIssuesByWorkflowStageRow
+		if err := rows.Scan(&i.WorkflowStageID, &i.TaskCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const countIssuesInWorkflowInstance = `-- name: CountIssuesInWorkflowInstance :one
@@ -172,9 +196,24 @@ type CountIssuesInWorkflowInstanceParams struct {
 
 func (q *Queries) CountIssuesInWorkflowInstance(ctx context.Context, arg CountIssuesInWorkflowInstanceParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countIssuesInWorkflowInstance, arg.WorkspaceID, arg.WorkflowInstanceID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countOpenIssuesInWorkflowStage = `-- name: CountOpenIssuesInWorkflowStage :one
+SELECT count(*)::bigint
+FROM issue
+WHERE workspace_id = $1
+  AND workflow_instance_id = $2
+  AND workflow_stage_id = $3
+  AND status NOT IN ('done', 'cancelled')
+`
+
+type CountOpenIssuesInWorkflowStageParams struct {
+	WorkspaceID        pgtype.UUID `json:"workspace_id"`
+	WorkflowInstanceID pgtype.UUID `json:"workflow_instance_id"`
+	WorkflowStageID    pgtype.UUID `json:"workflow_stage_id"`
 }
 
 func (q *Queries) CountOpenIssuesInWorkflowStage(ctx context.Context, arg CountOpenIssuesInWorkflowStageParams) (int64, error) {
@@ -299,7 +338,7 @@ INSERT INTO workflow_instance (
     $1, $2, $3, $4, $5,
     $6, $7, $8, $9,
     CASE WHEN $6 = 'active' THEN now() ELSE NULL END
-) RETURNING id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by
+) RETURNING id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by, revision
 `
 
 type CreateWorkflowInstanceParams struct {
@@ -344,6 +383,118 @@ func (q *Queries) CreateWorkflowInstance(ctx context.Context, arg CreateWorkflow
 		&i.UpdatedAt,
 		&i.ArchivedAt,
 		&i.ArchivedBy,
+		&i.Revision,
+	)
+	return i, err
+}
+
+const createWorkflowInstanceChange = `-- name: CreateWorkflowInstanceChange :one
+INSERT INTO workflow_instance_change (
+    workspace_id, workflow_instance_id, revision, changed_by,
+    change_note, before_plan, after_plan
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6, $7
+) RETURNING id, workspace_id, workflow_instance_id, revision, changed_by, change_note, before_plan, after_plan, created_at
+`
+
+type CreateWorkflowInstanceChangeParams struct {
+	WorkspaceID        pgtype.UUID `json:"workspace_id"`
+	WorkflowInstanceID pgtype.UUID `json:"workflow_instance_id"`
+	Revision           int32       `json:"revision"`
+	ChangedBy          pgtype.UUID `json:"changed_by"`
+	ChangeNote         pgtype.Text `json:"change_note"`
+	BeforePlan         []byte      `json:"before_plan"`
+	AfterPlan          []byte      `json:"after_plan"`
+}
+
+func (q *Queries) CreateWorkflowInstanceChange(ctx context.Context, arg CreateWorkflowInstanceChangeParams) (WorkflowInstanceChange, error) {
+	row := q.db.QueryRow(ctx, createWorkflowInstanceChange,
+		arg.WorkspaceID,
+		arg.WorkflowInstanceID,
+		arg.Revision,
+		arg.ChangedBy,
+		arg.ChangeNote,
+		arg.BeforePlan,
+		arg.AfterPlan,
+	)
+	var i WorkflowInstanceChange
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.WorkflowInstanceID,
+		&i.Revision,
+		&i.ChangedBy,
+		&i.ChangeNote,
+		&i.BeforePlan,
+		&i.AfterPlan,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createWorkflowInstanceStage = `-- name: CreateWorkflowInstanceStage :one
+INSERT INTO workflow_instance_stage (
+    workspace_id, workflow_instance_id, source_stage_id, stable_key, name,
+    description, position, completion_rule, input_spec, output_spec,
+    required_skills, gate, rollback_stage_key
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10,
+    $11, $12, $13
+) RETURNING id, workspace_id, workflow_instance_id, source_stage_id, stable_key, name, description, position, completion_rule, input_spec, output_spec, required_skills, gate, rollback_stage_key, created_at, updated_at
+`
+
+type CreateWorkflowInstanceStageParams struct {
+	WorkspaceID        pgtype.UUID `json:"workspace_id"`
+	WorkflowInstanceID pgtype.UUID `json:"workflow_instance_id"`
+	SourceStageID      pgtype.UUID `json:"source_stage_id"`
+	StableKey          string      `json:"stable_key"`
+	Name               string      `json:"name"`
+	Description        pgtype.Text `json:"description"`
+	Position           int32       `json:"position"`
+	CompletionRule     []byte      `json:"completion_rule"`
+	InputSpec          []byte      `json:"input_spec"`
+	OutputSpec         []byte      `json:"output_spec"`
+	RequiredSkills     []string    `json:"required_skills"`
+	Gate               []byte      `json:"gate"`
+	RollbackStageKey   pgtype.Text `json:"rollback_stage_key"`
+}
+
+func (q *Queries) CreateWorkflowInstanceStage(ctx context.Context, arg CreateWorkflowInstanceStageParams) (WorkflowInstanceStage, error) {
+	row := q.db.QueryRow(ctx, createWorkflowInstanceStage,
+		arg.WorkspaceID,
+		arg.WorkflowInstanceID,
+		arg.SourceStageID,
+		arg.StableKey,
+		arg.Name,
+		arg.Description,
+		arg.Position,
+		arg.CompletionRule,
+		arg.InputSpec,
+		arg.OutputSpec,
+		arg.RequiredSkills,
+		arg.Gate,
+		arg.RollbackStageKey,
+	)
+	var i WorkflowInstanceStage
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.WorkflowInstanceID,
+		&i.SourceStageID,
+		&i.StableKey,
+		&i.Name,
+		&i.Description,
+		&i.Position,
+		&i.CompletionRule,
+		&i.InputSpec,
+		&i.OutputSpec,
+		&i.RequiredSkills,
+		&i.Gate,
+		&i.RollbackStageKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -448,6 +599,27 @@ func (q *Queries) CreateWorkflowVersion(ctx context.Context, arg CreateWorkflowV
 	return i, err
 }
 
+const deleteWorkflowInstanceStage = `-- name: DeleteWorkflowInstanceStage :execrows
+DELETE FROM workflow_instance_stage
+WHERE id = $1
+  AND workflow_instance_id = $2
+  AND workspace_id = $3
+`
+
+type DeleteWorkflowInstanceStageParams struct {
+	ID                 pgtype.UUID `json:"id"`
+	WorkflowInstanceID pgtype.UUID `json:"workflow_instance_id"`
+	WorkspaceID        pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) DeleteWorkflowInstanceStage(ctx context.Context, arg DeleteWorkflowInstanceStageParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteWorkflowInstanceStage, arg.ID, arg.WorkflowInstanceID, arg.WorkspaceID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const detachIssueFromWorkflow = `-- name: DetachIssueFromWorkflow :one
 UPDATE issue SET
     workflow_instance_id = NULL,
@@ -501,6 +673,42 @@ func (q *Queries) DetachIssueFromWorkflow(ctx context.Context, arg DetachIssueFr
 	return i, err
 }
 
+const getFirstWorkflowInstanceStage = `-- name: GetFirstWorkflowInstanceStage :one
+SELECT id, workspace_id, workflow_instance_id, source_stage_id, stable_key, name, description, position, completion_rule, input_spec, output_spec, required_skills, gate, rollback_stage_key, created_at, updated_at FROM workflow_instance_stage
+WHERE workflow_instance_id = $1 AND workspace_id = $2
+ORDER BY position ASC
+LIMIT 1
+`
+
+type GetFirstWorkflowInstanceStageParams struct {
+	WorkflowInstanceID pgtype.UUID `json:"workflow_instance_id"`
+	WorkspaceID        pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) GetFirstWorkflowInstanceStage(ctx context.Context, arg GetFirstWorkflowInstanceStageParams) (WorkflowInstanceStage, error) {
+	row := q.db.QueryRow(ctx, getFirstWorkflowInstanceStage, arg.WorkflowInstanceID, arg.WorkspaceID)
+	var i WorkflowInstanceStage
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.WorkflowInstanceID,
+		&i.SourceStageID,
+		&i.StableKey,
+		&i.Name,
+		&i.Description,
+		&i.Position,
+		&i.CompletionRule,
+		&i.InputSpec,
+		&i.OutputSpec,
+		&i.RequiredSkills,
+		&i.Gate,
+		&i.RollbackStageKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getFirstWorkflowStage = `-- name: GetFirstWorkflowStage :one
 SELECT id, workspace_id, workflow_version_id, stable_key, name, description, position, completion_rule, input_spec, output_spec, required_skills, gate, rollback_stage_key, created_at FROM workflow_stage
 WHERE workflow_version_id = $1 AND workspace_id = $2
@@ -531,6 +739,45 @@ func (q *Queries) GetFirstWorkflowStage(ctx context.Context, arg GetFirstWorkflo
 		&i.Gate,
 		&i.RollbackStageKey,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getNextWorkflowInstanceStage = `-- name: GetNextWorkflowInstanceStage :one
+SELECT id, workspace_id, workflow_instance_id, source_stage_id, stable_key, name, description, position, completion_rule, input_spec, output_spec, required_skills, gate, rollback_stage_key, created_at, updated_at FROM workflow_instance_stage
+WHERE workflow_instance_id = $1
+  AND workspace_id = $2
+  AND position > $3
+ORDER BY position ASC
+LIMIT 1
+`
+
+type GetNextWorkflowInstanceStageParams struct {
+	WorkflowInstanceID pgtype.UUID `json:"workflow_instance_id"`
+	WorkspaceID        pgtype.UUID `json:"workspace_id"`
+	Position           int32       `json:"position"`
+}
+
+func (q *Queries) GetNextWorkflowInstanceStage(ctx context.Context, arg GetNextWorkflowInstanceStageParams) (WorkflowInstanceStage, error) {
+	row := q.db.QueryRow(ctx, getNextWorkflowInstanceStage, arg.WorkflowInstanceID, arg.WorkspaceID, arg.Position)
+	var i WorkflowInstanceStage
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.WorkflowInstanceID,
+		&i.SourceStageID,
+		&i.StableKey,
+		&i.Name,
+		&i.Description,
+		&i.Position,
+		&i.CompletionRule,
+		&i.InputSpec,
+		&i.OutputSpec,
+		&i.RequiredSkills,
+		&i.Gate,
+		&i.RollbackStageKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -601,7 +848,7 @@ func (q *Queries) GetWorkflowInWorkspace(ctx context.Context, arg GetWorkflowInW
 }
 
 const getWorkflowInstanceInWorkspace = `-- name: GetWorkflowInstanceInWorkspace :one
-SELECT id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by FROM workflow_instance
+SELECT id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by, revision FROM workflow_instance
 WHERE id = $1 AND workspace_id = $2
 `
 
@@ -630,6 +877,81 @@ func (q *Queries) GetWorkflowInstanceInWorkspace(ctx context.Context, arg GetWor
 		&i.UpdatedAt,
 		&i.ArchivedAt,
 		&i.ArchivedBy,
+		&i.Revision,
+	)
+	return i, err
+}
+
+const getWorkflowInstanceStage = `-- name: GetWorkflowInstanceStage :one
+SELECT id, workspace_id, workflow_instance_id, source_stage_id, stable_key, name, description, position, completion_rule, input_spec, output_spec, required_skills, gate, rollback_stage_key, created_at, updated_at FROM workflow_instance_stage
+WHERE id = $1
+  AND workflow_instance_id = $2
+  AND workspace_id = $3
+`
+
+type GetWorkflowInstanceStageParams struct {
+	ID                 pgtype.UUID `json:"id"`
+	WorkflowInstanceID pgtype.UUID `json:"workflow_instance_id"`
+	WorkspaceID        pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) GetWorkflowInstanceStage(ctx context.Context, arg GetWorkflowInstanceStageParams) (WorkflowInstanceStage, error) {
+	row := q.db.QueryRow(ctx, getWorkflowInstanceStage, arg.ID, arg.WorkflowInstanceID, arg.WorkspaceID)
+	var i WorkflowInstanceStage
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.WorkflowInstanceID,
+		&i.SourceStageID,
+		&i.StableKey,
+		&i.Name,
+		&i.Description,
+		&i.Position,
+		&i.CompletionRule,
+		&i.InputSpec,
+		&i.OutputSpec,
+		&i.RequiredSkills,
+		&i.Gate,
+		&i.RollbackStageKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getWorkflowInstanceStageByStableKey = `-- name: GetWorkflowInstanceStageByStableKey :one
+SELECT id, workspace_id, workflow_instance_id, source_stage_id, stable_key, name, description, position, completion_rule, input_spec, output_spec, required_skills, gate, rollback_stage_key, created_at, updated_at FROM workflow_instance_stage
+WHERE workflow_instance_id = $1
+  AND workspace_id = $2
+  AND stable_key = $3
+`
+
+type GetWorkflowInstanceStageByStableKeyParams struct {
+	WorkflowInstanceID pgtype.UUID `json:"workflow_instance_id"`
+	WorkspaceID        pgtype.UUID `json:"workspace_id"`
+	StableKey          string      `json:"stable_key"`
+}
+
+func (q *Queries) GetWorkflowInstanceStageByStableKey(ctx context.Context, arg GetWorkflowInstanceStageByStableKeyParams) (WorkflowInstanceStage, error) {
+	row := q.db.QueryRow(ctx, getWorkflowInstanceStageByStableKey, arg.WorkflowInstanceID, arg.WorkspaceID, arg.StableKey)
+	var i WorkflowInstanceStage
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.WorkflowInstanceID,
+		&i.SourceStageID,
+		&i.StableKey,
+		&i.Name,
+		&i.Description,
+		&i.Position,
+		&i.CompletionRule,
+		&i.InputSpec,
+		&i.OutputSpec,
+		&i.RequiredSkills,
+		&i.Gate,
+		&i.RollbackStageKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -834,8 +1156,97 @@ func (q *Queries) ListWorkflowGateDecisions(ctx context.Context, arg ListWorkflo
 	return items, nil
 }
 
+const listWorkflowInstanceChanges = `-- name: ListWorkflowInstanceChanges :many
+SELECT id, workspace_id, workflow_instance_id, revision, changed_by, change_note, before_plan, after_plan, created_at FROM workflow_instance_change
+WHERE workflow_instance_id = $1 AND workspace_id = $2
+ORDER BY revision DESC
+`
+
+type ListWorkflowInstanceChangesParams struct {
+	WorkflowInstanceID pgtype.UUID `json:"workflow_instance_id"`
+	WorkspaceID        pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) ListWorkflowInstanceChanges(ctx context.Context, arg ListWorkflowInstanceChangesParams) ([]WorkflowInstanceChange, error) {
+	rows, err := q.db.Query(ctx, listWorkflowInstanceChanges, arg.WorkflowInstanceID, arg.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorkflowInstanceChange{}
+	for rows.Next() {
+		var i WorkflowInstanceChange
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.WorkflowInstanceID,
+			&i.Revision,
+			&i.ChangedBy,
+			&i.ChangeNote,
+			&i.BeforePlan,
+			&i.AfterPlan,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkflowInstanceStages = `-- name: ListWorkflowInstanceStages :many
+SELECT id, workspace_id, workflow_instance_id, source_stage_id, stable_key, name, description, position, completion_rule, input_spec, output_spec, required_skills, gate, rollback_stage_key, created_at, updated_at FROM workflow_instance_stage
+WHERE workflow_instance_id = $1 AND workspace_id = $2
+ORDER BY position ASC
+`
+
+type ListWorkflowInstanceStagesParams struct {
+	WorkflowInstanceID pgtype.UUID `json:"workflow_instance_id"`
+	WorkspaceID        pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) ListWorkflowInstanceStages(ctx context.Context, arg ListWorkflowInstanceStagesParams) ([]WorkflowInstanceStage, error) {
+	rows, err := q.db.Query(ctx, listWorkflowInstanceStages, arg.WorkflowInstanceID, arg.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorkflowInstanceStage{}
+	for rows.Next() {
+		var i WorkflowInstanceStage
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.WorkflowInstanceID,
+			&i.SourceStageID,
+			&i.StableKey,
+			&i.Name,
+			&i.Description,
+			&i.Position,
+			&i.CompletionRule,
+			&i.InputSpec,
+			&i.OutputSpec,
+			&i.RequiredSkills,
+			&i.Gate,
+			&i.RollbackStageKey,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkflowInstances = `-- name: ListWorkflowInstances :many
-SELECT id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by FROM workflow_instance
+SELECT id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by, revision FROM workflow_instance
 WHERE workspace_id = $1
   AND ($2::uuid IS NULL OR workflow_id = $2)
   AND ($3::uuid IS NULL OR project_id = $3)
@@ -881,6 +1292,7 @@ func (q *Queries) ListWorkflowInstances(ctx context.Context, arg ListWorkflowIns
 			&i.UpdatedAt,
 			&i.ArchivedAt,
 			&i.ArchivedBy,
+			&i.Revision,
 		); err != nil {
 			return nil, err
 		}
@@ -1056,6 +1468,42 @@ func (q *Queries) LockWorkflowForVersion(ctx context.Context, arg LockWorkflowFo
 	return i, err
 }
 
+const lockWorkflowInstanceInWorkspace = `-- name: LockWorkflowInstanceInWorkspace :one
+SELECT id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by, revision FROM workflow_instance
+WHERE id = $1 AND workspace_id = $2
+FOR UPDATE
+`
+
+type LockWorkflowInstanceInWorkspaceParams struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) LockWorkflowInstanceInWorkspace(ctx context.Context, arg LockWorkflowInstanceInWorkspaceParams) (WorkflowInstance, error) {
+	row := q.db.QueryRow(ctx, lockWorkflowInstanceInWorkspace, arg.ID, arg.WorkspaceID)
+	var i WorkflowInstance
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.WorkflowID,
+		&i.WorkflowVersionID,
+		&i.Title,
+		&i.Description,
+		&i.Status,
+		&i.CurrentStageID,
+		&i.ProjectID,
+		&i.CreatedBy,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
+		&i.Revision,
+	)
+	return i, err
+}
+
 const nextWorkflowVersionNumber = `-- name: NextWorkflowVersionNumber :one
 SELECT COALESCE(MAX(version), 0)::integer + 1
 FROM workflow_version
@@ -1143,6 +1591,23 @@ func (q *Queries) SetWorkflowCurrentVersion(ctx context.Context, arg SetWorkflow
 	return i, err
 }
 
+const shiftWorkflowInstanceStagePositions = `-- name: ShiftWorkflowInstanceStagePositions :exec
+UPDATE workflow_instance_stage
+SET position = position + 1000,
+    updated_at = now()
+WHERE workflow_instance_id = $1 AND workspace_id = $2
+`
+
+type ShiftWorkflowInstanceStagePositionsParams struct {
+	WorkflowInstanceID pgtype.UUID `json:"workflow_instance_id"`
+	WorkspaceID        pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) ShiftWorkflowInstanceStagePositions(ctx context.Context, arg ShiftWorkflowInstanceStagePositionsParams) error {
+	_, err := q.db.Exec(ctx, shiftWorkflowInstanceStagePositions, arg.WorkflowInstanceID, arg.WorkspaceID)
+	return err
+}
+
 const supersedeOtherWorkflowVersions = `-- name: SupersedeOtherWorkflowVersions :exec
 UPDATE workflow_version SET
     status = 'superseded'
@@ -1163,6 +1628,130 @@ func (q *Queries) SupersedeOtherWorkflowVersions(ctx context.Context, arg Supers
 	return err
 }
 
+const updateWorkflowInstancePlanMetadata = `-- name: UpdateWorkflowInstancePlanMetadata :one
+UPDATE workflow_instance SET
+    title = $3,
+    description = $4,
+    revision = revision + 1,
+    updated_at = now()
+WHERE id = $1
+  AND workspace_id = $2
+  AND revision = $5
+RETURNING id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by, revision
+`
+
+type UpdateWorkflowInstancePlanMetadataParams struct {
+	ID          pgtype.UUID `json:"id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	Title       string      `json:"title"`
+	Description pgtype.Text `json:"description"`
+	Revision    int32       `json:"revision"`
+}
+
+func (q *Queries) UpdateWorkflowInstancePlanMetadata(ctx context.Context, arg UpdateWorkflowInstancePlanMetadataParams) (WorkflowInstance, error) {
+	row := q.db.QueryRow(ctx, updateWorkflowInstancePlanMetadata,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.Title,
+		arg.Description,
+		arg.Revision,
+	)
+	var i WorkflowInstance
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.WorkflowID,
+		&i.WorkflowVersionID,
+		&i.Title,
+		&i.Description,
+		&i.Status,
+		&i.CurrentStageID,
+		&i.ProjectID,
+		&i.CreatedBy,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ArchivedAt,
+		&i.ArchivedBy,
+		&i.Revision,
+	)
+	return i, err
+}
+
+const updateWorkflowInstanceStage = `-- name: UpdateWorkflowInstanceStage :one
+UPDATE workflow_instance_stage SET
+    stable_key = $4,
+    name = $5,
+    description = $6,
+    position = $7,
+    completion_rule = $8,
+    input_spec = $9,
+    output_spec = $10,
+    required_skills = $11,
+    gate = $12,
+    rollback_stage_key = $13,
+    updated_at = now()
+WHERE id = $1
+  AND workflow_instance_id = $2
+  AND workspace_id = $3
+RETURNING id, workspace_id, workflow_instance_id, source_stage_id, stable_key, name, description, position, completion_rule, input_spec, output_spec, required_skills, gate, rollback_stage_key, created_at, updated_at
+`
+
+type UpdateWorkflowInstanceStageParams struct {
+	ID                 pgtype.UUID `json:"id"`
+	WorkflowInstanceID pgtype.UUID `json:"workflow_instance_id"`
+	WorkspaceID        pgtype.UUID `json:"workspace_id"`
+	StableKey          string      `json:"stable_key"`
+	Name               string      `json:"name"`
+	Description        pgtype.Text `json:"description"`
+	Position           int32       `json:"position"`
+	CompletionRule     []byte      `json:"completion_rule"`
+	InputSpec          []byte      `json:"input_spec"`
+	OutputSpec         []byte      `json:"output_spec"`
+	RequiredSkills     []string    `json:"required_skills"`
+	Gate               []byte      `json:"gate"`
+	RollbackStageKey   pgtype.Text `json:"rollback_stage_key"`
+}
+
+func (q *Queries) UpdateWorkflowInstanceStage(ctx context.Context, arg UpdateWorkflowInstanceStageParams) (WorkflowInstanceStage, error) {
+	row := q.db.QueryRow(ctx, updateWorkflowInstanceStage,
+		arg.ID,
+		arg.WorkflowInstanceID,
+		arg.WorkspaceID,
+		arg.StableKey,
+		arg.Name,
+		arg.Description,
+		arg.Position,
+		arg.CompletionRule,
+		arg.InputSpec,
+		arg.OutputSpec,
+		arg.RequiredSkills,
+		arg.Gate,
+		arg.RollbackStageKey,
+	)
+	var i WorkflowInstanceStage
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.WorkflowInstanceID,
+		&i.SourceStageID,
+		&i.StableKey,
+		&i.Name,
+		&i.Description,
+		&i.Position,
+		&i.CompletionRule,
+		&i.InputSpec,
+		&i.OutputSpec,
+		&i.RequiredSkills,
+		&i.Gate,
+		&i.RollbackStageKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateWorkflowInstanceState = `-- name: UpdateWorkflowInstanceState :one
 UPDATE workflow_instance SET
     status = COALESCE($3, status),
@@ -1178,7 +1767,7 @@ UPDATE workflow_instance SET
     END,
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2
-RETURNING id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by
+RETURNING id, workspace_id, workflow_id, workflow_version_id, title, description, status, current_stage_id, project_id, created_by, started_at, completed_at, created_at, updated_at, archived_at, archived_by, revision
 `
 
 type UpdateWorkflowInstanceStateParams struct {
@@ -1213,6 +1802,7 @@ func (q *Queries) UpdateWorkflowInstanceState(ctx context.Context, arg UpdateWor
 		&i.UpdatedAt,
 		&i.ArchivedAt,
 		&i.ArchivedBy,
+		&i.Revision,
 	)
 	return i, err
 }

@@ -79,6 +79,7 @@ import {
   WORKFLOW_TASK_STATUSES,
 } from "./workflow-task-sort";
 import { ProjectSopDesigner } from "./project-sop-designer";
+import { StageReviewControl } from "./stage-review-control";
 
 const ALL_TASK_STATUSES = "all";
 
@@ -93,7 +94,7 @@ function formatTaskDate(date: string): string {
   );
 }
 
-function gateType(stage: WorkflowStage): WorkflowGateType {
+function gateType(stage: Pick<WorkflowStage, "gate">): WorkflowGateType {
   const value = stage.gate.type;
   return value === "human" ||
     value === "agent" ||
@@ -119,7 +120,7 @@ function WorkflowTaskCard({ task }: { task: Issue }) {
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform) }}
       className={cn(
-        "group rounded-xl border border-border/70 bg-background p-3 shadow-sm transition",
+        "group/card rounded-lg border-[0.5px] border-surface-border bg-surface px-2.5 py-3 shadow-[var(--surface-shadow)] transition-colors hover:border-foreground/15 hover:bg-surface-hover",
         isDragging && "z-20 opacity-50 shadow-lg",
       )}
     >
@@ -127,7 +128,7 @@ function WorkflowTaskCard({ task }: { task: Issue }) {
         <button
           type="button"
           aria-label={tWorkflows(($) => $.board.drag_task)}
-          className="mt-0.5 cursor-grab touch-none text-muted-foreground/50 opacity-0 transition group-hover:opacity-100 active:cursor-grabbing"
+          className="mt-0.5 cursor-grab touch-none rounded text-muted-foreground/50 opacity-0 transition-opacity group-hover/card:opacity-100 focus-visible:opacity-100 active:cursor-grabbing"
           {...attributes}
           {...listeners}
         >
@@ -146,7 +147,7 @@ function WorkflowTaskCard({ task }: { task: Issue }) {
           </div>
           <AppLink
             href={paths.taskDetail(task.id)}
-            className="mt-1.5 line-clamp-2 text-body font-medium leading-5 text-foreground hover:underline"
+            className="mt-1 block line-clamp-2 text-body font-medium leading-snug text-foreground hover:underline"
           >
             {task.title}
           </AppLink>
@@ -156,7 +157,7 @@ function WorkflowTaskCard({ task }: { task: Issue }) {
             </p>
           )}
           {task.labels && task.labels.length > 0 && (
-            <div className="mt-2 flex min-w-0 items-center gap-1 overflow-hidden">
+            <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1.5">
               {task.labels.slice(0, 2).map((label) => (
                 <span
                   key={label.id}
@@ -176,7 +177,7 @@ function WorkflowTaskCard({ task }: { task: Issue }) {
               )}
             </div>
           )}
-          <div className="mt-2 flex min-w-0 items-center gap-2 border-t border-border/60 pt-2 text-caption text-muted-foreground">
+          <div className="mt-2 flex min-w-0 items-center justify-between gap-2 text-caption text-muted-foreground">
             {task.assignee_type && task.assignee_id ? (
               <span className="flex min-w-0 items-center gap-1.5">
                 <ActorAvatar
@@ -235,17 +236,18 @@ function WorkflowBoardColumn({
   return (
     <section
       ref={setNodeRef}
+      aria-label={title}
       className={cn(
-        "flex w-[286px] shrink-0 flex-col rounded-2xl border border-border/60 bg-muted/35 p-2 transition",
-        isOver && "border-brand/50 bg-brand/5 ring-2 ring-brand/10",
-        active && "border-brand/30",
+        "flex min-h-0 w-[280px] shrink-0 flex-col rounded-xl bg-muted/40 p-2 transition-colors",
+        isOver && "bg-accent/60 ring-2 ring-brand/25",
+        active && "ring-1 ring-brand/25",
       )}
     >
-      <header className="flex min-h-12 items-start justify-between gap-2 px-2 py-1.5">
+      <header className="mb-2 flex min-h-8 items-start justify-between gap-2 px-1.5">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             {active && <CircleDot className="size-3.5 shrink-0 text-brand" />}
-            <h3 className="truncate text-body font-semibold">{title}</h3>
+            <h3 className="truncate text-body font-medium">{title}</h3>
           </div>
           {caption && (
             <p className="mt-1 line-clamp-1 text-micro text-muted-foreground">
@@ -253,19 +255,26 @@ function WorkflowBoardColumn({
             </p>
           )}
         </div>
-        <span className="rounded-full bg-background px-2 py-0.5 text-micro font-medium text-muted-foreground">
+        <span className="shrink-0 rounded-full bg-background px-1.5 py-0.5 text-micro font-medium tabular-nums text-muted-foreground">
           {tasks.length}
         </span>
       </header>
-      <div className="flex min-h-36 flex-1 flex-col gap-2 rounded-xl p-1">
-        {tasks.map((task) => (
-          <WorkflowTaskCard key={task.id} task={task} />
-        ))}
-        {tasks.length === 0 && (
-          <div className="flex min-h-24 items-center justify-center rounded-xl border border-dashed border-border/70 text-caption text-muted-foreground">
-            {t(($) => $.board.empty_stage)}
-          </div>
-        )}
+      <div className="relative min-h-[200px] flex-1 rounded-lg">
+        <div
+          data-workflow-board-scroll
+          className="absolute inset-0 overflow-y-auto overscroll-contain rounded-lg p-1 transition-colors"
+        >
+          {tasks.map((task, index) => (
+            <div key={task.id} className={index === 0 ? undefined : "pt-2"}>
+              <WorkflowTaskCard task={task} />
+            </div>
+          ))}
+          {tasks.length === 0 && (
+            <p className="py-8 text-center text-caption text-muted-foreground">
+              {t(($) => $.board.empty_stage)}
+            </p>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -371,39 +380,46 @@ export function WorkflowBoard({
               total: tasks.length,
             })}
           </span>
-          <Select
-            items={statusFilterItems}
-            value={statusFilter}
-            onValueChange={(value) => {
-              if (value) setStatusFilter(value as TaskStatusFilter);
-            }}
-          >
-            <SelectTrigger
-              size="sm"
-              aria-label={t(($) => $.board.status_filter)}
+          <div className="flex items-center gap-2">
+            <Select
+              items={statusFilterItems}
+              value={statusFilter}
+              onValueChange={(value) => {
+                if (value) setStatusFilter(value as TaskStatusFilter);
+              }}
             >
-              <Filter className="size-3.5 text-muted-foreground" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent
-              align="end"
-              alignItemWithTrigger={false}
-              className="max-h-72"
-            >
-              <SelectItem value={ALL_TASK_STATUSES}>
+              <SelectTrigger
+                size="sm"
+                aria-label={t(($) => $.board.status_filter)}
+              >
                 <Filter className="size-3.5 text-muted-foreground" />
-                {t(($) => $.board.all_statuses)}
-              </SelectItem>
-              {WORKFLOW_TASK_STATUSES.map((status) => (
-                <SelectItem key={status} value={status}>
-                  <StatusIcon status={status} className="size-3.5" />
-                  {tIssues(($) => $.status[status])}
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent
+                align="end"
+                alignItemWithTrigger={false}
+                className="max-h-72"
+              >
+                <SelectItem value={ALL_TASK_STATUSES}>
+                  <Filter className="size-3.5 text-muted-foreground" />
+                  {t(($) => $.board.all_statuses)}
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+                {WORKFLOW_TASK_STATUSES.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    <StatusIcon status={status} className="size-3.5" />
+                    {tIssues(($) => $.status[status])}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-        <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-3">
+        {mode === "stage" && (
+          <div className="mb-2">
+            <StageReviewControl instance={instance} />
+          </div>
+        )}
+        <div className="flex min-h-0 flex-1 gap-4 overflow-x-auto overflow-y-hidden p-2">
           {mode === "stage"
             ? stages.map((stage) => (
                 <WorkflowBoardColumn

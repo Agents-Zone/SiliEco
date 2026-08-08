@@ -71,6 +71,24 @@ WHERE decision.workspace_id = sqlc.arg('workspace_id')
         AND instance.workspace_id = sqlc.arg('workspace_id')
   );
 
+-- name: DeleteProjectWorkflowInstanceChanges :exec
+DELETE FROM workflow_instance_change AS change
+WHERE change.workspace_id = sqlc.arg('workspace_id')
+  AND workflow_instance_id IN (
+      SELECT instance.id FROM workflow_instance AS instance
+      WHERE instance.project_id = sqlc.arg('project_id')
+        AND instance.workspace_id = sqlc.arg('workspace_id')
+  );
+
+-- name: DeleteProjectWorkflowInstanceStages :exec
+DELETE FROM workflow_instance_stage AS stage
+WHERE stage.workspace_id = sqlc.arg('workspace_id')
+  AND workflow_instance_id IN (
+      SELECT instance.id FROM workflow_instance AS instance
+      WHERE instance.project_id = sqlc.arg('project_id')
+        AND instance.workspace_id = sqlc.arg('workspace_id')
+  );
+
 -- name: DeleteProjectWorkflowInstances :exec
 DELETE FROM workflow_instance
 WHERE project_id = sqlc.arg('project_id')

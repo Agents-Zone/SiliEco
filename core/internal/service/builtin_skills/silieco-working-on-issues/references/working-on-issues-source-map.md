@@ -162,6 +162,14 @@ assignee (often a squad leader) decides the parent is complete, the system
 comment explicitly asks for `silieco issue status <parent-id> in_review` —
 comment-triggered runs otherwise must not change status unless asked.
 
+## SOP workflow assignment
+
+| Behavior | File:line |
+|---|---|
+| `--workflow-instance` + `--workflow-stage` on Task create/update | `core/cmd/silieco/cmd_issue.go` (`issueCreateCmd`, `issueUpdateCmd`, `runIssueCreate`, `runIssueUpdate`) |
+| Assignment pair validation, Project alignment, and Stage membership validation | `core/internal/handler/issue.go` (`UpdateIssue`, `validateWorkflowTaskAssignment`) |
+| Explicit null pair detaches a Task from its SOP run | `core/internal/handler/issue.go` (`UpdateIssue`); `core/internal/handler/workflow.go` (`DetachWorkflowTask`) |
+
 ## Metadata CLI
 
 | Behavior | File:line |

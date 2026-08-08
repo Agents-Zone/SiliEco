@@ -434,7 +434,11 @@ func newIssueCreateTestCmd() *cobra.Command {
 	cmd.Flags().String("assignee", "", "")
 	cmd.Flags().String("assignee-id", "", "")
 	cmd.Flags().String("parent", "", "")
+	cmd.Flags().Int("stage", 0, "")
 	cmd.Flags().String("project", "", "")
+	cmd.Flags().String("workflow-instance", "", "")
+	cmd.Flags().String("workflow-stage", "", "")
+	cmd.Flags().String("start-date", "", "")
 	cmd.Flags().String("due-date", "", "")
 	cmd.Flags().Bool("allow-duplicate", false, "")
 	cmd.Flags().String("output", "json", "")
@@ -478,6 +482,42 @@ func TestRunIssueCreateSendsAllowDuplicate(t *testing.T) {
 	}
 	if got := body["allow_duplicate"]; got != true {
 		t.Fatalf("allow_duplicate = %#v, want true in request body", got)
+	}
+}
+
+func TestRunIssueCreateSendsWorkflowAssignment(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/api/issues" {
+			http.NotFound(w, r)
+			return
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decode body: %v", err)
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"id": "issue-1", "identifier": "SILI-1", "title": "SOP task",
+			"status": "todo", "priority": "none",
+		})
+	}))
+	defer srv.Close()
+
+	t.Setenv("SILIECO_SERVER_URL", srv.URL)
+	t.Setenv("SILIECO_WORKSPACE_ID", "ws-1")
+	t.Setenv("SILIECO_TOKEN", "test-token")
+
+	cmd := newIssueCreateTestCmd()
+	_ = cmd.Flags().Set("title", "SOP task")
+	_ = cmd.Flags().Set("workflow-instance", "instance-1")
+	_ = cmd.Flags().Set("workflow-stage", "stage-1")
+	if err := runIssueCreate(cmd, nil); err != nil {
+		t.Fatalf("runIssueCreate: %v", err)
+	}
+	if got := body["workflow_instance_id"]; got != "instance-1" {
+		t.Fatalf("workflow_instance_id = %#v, want instance-1", got)
+	}
+	if got := body["workflow_stage_id"]; got != "stage-1" {
+		t.Fatalf("workflow_stage_id = %#v, want stage-1", got)
 	}
 }
 
@@ -2813,12 +2853,96 @@ func newIssueUpdateTestCmd() *cobra.Command {
 	cmd.Flags().String("assignee", "", "")
 	cmd.Flags().String("assignee-id", "", "")
 	cmd.Flags().String("project", "", "")
+	cmd.Flags().String("workflow-instance", "", "")
+	cmd.Flags().String("workflow-stage", "", "")
 	cmd.Flags().String("start-date", "", "")
 	cmd.Flags().String("due-date", "", "")
 	cmd.Flags().String("parent", "", "")
+	cmd.Flags().Int("stage", 0, "")
 	cmd.Flags().Float64("position", 0, "")
 	cmd.Flags().String("output", "json", "")
 	return cmd
+}
+
+func TestRunIssueUpdateSendsWorkflowAssignment(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/issues/SILI-1":
+			json.NewEncoder(w).Encode(map[string]any{"id": "issue-1", "identifier": "SILI-1"})
+		case r.Method == http.MethodPut && r.URL.Path == "/api/issues/issue-1":
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode body: %v", err)
+			}
+			json.NewEncoder(w).Encode(map[string]any{"id": "issue-1", "identifier": "SILI-1"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	t.Setenv("SILIECO_SERVER_URL", srv.URL)
+	t.Setenv("SILIECO_WORKSPACE_ID", "ws-1")
+	t.Setenv("SILIECO_TOKEN", "test-token")
+
+	cmd := newIssueUpdateTestCmd()
+	_ = cmd.Flags().Set("workflow-instance", "instance-1")
+	_ = cmd.Flags().Set("workflow-stage", "stage-2")
+	if err := runIssueUpdate(cmd, []string{"SILI-1"}); err != nil {
+		t.Fatalf("runIssueUpdate: %v", err)
+	}
+	if got := body["workflow_instance_id"]; got != "instance-1" {
+		t.Fatalf("workflow_instance_id = %#v, want instance-1", got)
+	}
+	if got := body["workflow_stage_id"]; got != "stage-2" {
+		t.Fatalf("workflow_stage_id = %#v, want stage-2", got)
+	}
+}
+
+func TestRunIssueUpdateDetachesWorkflowAssignment(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/issues/SILI-1":
+			json.NewEncoder(w).Encode(map[string]any{"id": "issue-1", "identifier": "SILI-1"})
+		case r.Method == http.MethodPut && r.URL.Path == "/api/issues/issue-1":
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode body: %v", err)
+			}
+			json.NewEncoder(w).Encode(map[string]any{"id": "issue-1", "identifier": "SILI-1"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	t.Setenv("SILIECO_SERVER_URL", srv.URL)
+	t.Setenv("SILIECO_WORKSPACE_ID", "ws-1")
+	t.Setenv("SILIECO_TOKEN", "test-token")
+
+	cmd := newIssueUpdateTestCmd()
+	_ = cmd.Flags().Set("workflow-instance", "")
+	_ = cmd.Flags().Set("workflow-stage", "")
+	if err := runIssueUpdate(cmd, []string{"SILI-1"}); err != nil {
+		t.Fatalf("runIssueUpdate: %v", err)
+	}
+	if got, ok := body["workflow_instance_id"]; !ok || got != nil {
+		t.Fatalf("workflow_instance_id = %#v (present=%v), want explicit null", got, ok)
+	}
+	if got, ok := body["workflow_stage_id"]; !ok || got != nil {
+		t.Fatalf("workflow_stage_id = %#v (present=%v), want explicit null", got, ok)
+	}
+}
+
+func TestRunIssueUpdateRequiresWorkflowFlagsTogether(t *testing.T) {
+	t.Setenv("SILIECO_SERVER_URL", "http://127.0.0.1:0")
+	t.Setenv("SILIECO_WORKSPACE_ID", "ws-1")
+	cmd := newIssueUpdateTestCmd()
+	_ = cmd.Flags().Set("workflow-instance", "instance-1")
+	err := runIssueUpdate(cmd, []string{"SILI-1"})
+	if err == nil || !strings.Contains(err.Error(), "must be provided together") {
+		t.Fatalf("error = %v, want paired workflow flag validation", err)
+	}
 }
 
 func newIssueListTestCmd() *cobra.Command {

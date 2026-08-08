@@ -50,8 +50,9 @@ func TestProjectResourceLifecycle(t *testing.T) {
 		t.Errorf("created.ResourceType = %q, want github_repo", created.ResourceType)
 	}
 	var ref struct {
-		URL string `json:"url"`
-		Ref string `json:"ref"`
+		URL     string `json:"url"`
+		Ref     string `json:"ref"`
+		Primary bool   `json:"primary"`
 	}
 	if err := json.Unmarshal(created.ResourceRef, &ref); err != nil {
 		t.Fatalf("decode resource_ref: %v", err)
@@ -61,6 +62,9 @@ func TestProjectResourceLifecycle(t *testing.T) {
 	}
 	if ref.Ref != "release/v2" {
 		t.Errorf("created.ResourceRef.ref = %q, want release/v2", ref.Ref)
+	}
+	if !ref.Primary {
+		t.Error("the first github_repo should be selected as primary")
 	}
 
 	// Listing must include the new resource.
@@ -122,6 +126,105 @@ func TestProjectResourceLifecycle(t *testing.T) {
 	testHandler.CreateProjectResource(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("unknown type: expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// A project may have multiple repositories, but exactly one is the default
+	// execution repository. Promoting a second repository demotes the first.
+	w = httptest.NewRecorder()
+	req = newRequest("POST", "/api/projects/"+project.ID+"/resources", map[string]any{
+		"resource_type": "github_repo",
+		"resource_ref": map[string]any{
+			"url": "https://github.com/silieco-ai/secondary",
+		},
+	})
+	req = withURLParam(req, "id", project.ID)
+	testHandler.CreateProjectResource(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create secondary repository: %d %s", w.Code, w.Body.String())
+	}
+	var secondary ProjectResourceResponse
+	if err := json.NewDecoder(w.Body).Decode(&secondary); err != nil {
+		t.Fatalf("decode secondary repository: %v", err)
+	}
+
+	w = httptest.NewRecorder()
+	req = newRequest("PUT", "/api/projects/"+project.ID+"/resources/"+secondary.ID, map[string]any{
+		"resource_ref": map[string]any{
+			"url":     "https://github.com/silieco-ai/secondary",
+			"primary": true,
+		},
+	})
+	req = withURLParams(req, "id", project.ID, "resourceId", secondary.ID)
+	testHandler.UpdateProjectResource(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("promote secondary repository: %d %s", w.Code, w.Body.String())
+	}
+
+	// Local working copies are children of a repository resource.
+	w = httptest.NewRecorder()
+	req = newRequest("POST", "/api/projects/"+project.ID+"/resources", map[string]any{
+		"resource_type": "local_directory",
+		"resource_ref": map[string]any{
+			"local_path":             "/Users/ryan/mycode/secondary",
+			"daemon_id":              "daemon-local",
+			"repository_resource_id": secondary.ID,
+		},
+	})
+	req = withURLParam(req, "id", project.ID)
+	testHandler.CreateProjectResource(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create repository mapping: %d %s", w.Code, w.Body.String())
+	}
+
+	// The same daemon may map another repository to a different local clone.
+	w = httptest.NewRecorder()
+	req = newRequest("POST", "/api/projects/"+project.ID+"/resources", map[string]any{
+		"resource_type": "local_directory",
+		"resource_ref": map[string]any{
+			"local_path":             "/Users/ryan/mycode/silieco",
+			"daemon_id":              "daemon-local",
+			"repository_resource_id": created.ID,
+		},
+	})
+	req = withURLParam(req, "id", project.ID)
+	testHandler.CreateProjectResource(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create second repository mapping on same daemon: %d %s", w.Code, w.Body.String())
+	}
+
+	// Deleting a repository explicitly removes its local mappings and promotes
+	// the next repository; there is intentionally no database cascade.
+	w = httptest.NewRecorder()
+	req = newRequest("DELETE", "/api/projects/"+project.ID+"/resources/"+secondary.ID, nil)
+	req = withURLParams(req, "id", project.ID, "resourceId", secondary.ID)
+	testHandler.DeleteProjectResource(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("delete secondary repository: %d %s", w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	req = newRequest("GET", "/api/projects/"+project.ID+"/resources", nil)
+	req = withURLParam(req, "id", project.ID)
+	testHandler.ListProjectResources(w, req)
+	if err := json.NewDecoder(w.Body).Decode(&listResp); err != nil {
+		t.Fatalf("decode list after deleting secondary: %v", err)
+	}
+	if len(listResp.Resources) != 2 {
+		t.Fatalf("resources after repository delete = %+v, want original repository and its mapping", listResp.Resources)
+	}
+	var remainingRepository *ProjectResourceResponse
+	for i := range listResp.Resources {
+		if listResp.Resources[i].ID == created.ID {
+			remainingRepository = &listResp.Resources[i]
+		}
+	}
+	if remainingRepository == nil {
+		t.Fatalf("original repository missing after deleting secondary: %+v", listResp.Resources)
+	}
+	if err := json.Unmarshal(remainingRepository.ResourceRef, &ref); err != nil {
+		t.Fatalf("decode promoted repository ref: %v", err)
+	}
+	if !ref.Primary {
+		t.Error("remaining repository should be promoted after primary deletion")
 	}
 
 	// Delete the resource.

@@ -491,6 +491,8 @@ func init() {
 	issueUpdateCmd.Flags().String("assignee", "", "New assignee name (member, agent, or squad; fuzzy match)")
 	issueUpdateCmd.Flags().String("assignee-id", "", "New assignee UUID — member, agent, or squad (mutually exclusive with --assignee)")
 	issueUpdateCmd.Flags().String("project", "", "Project ID")
+	issueUpdateCmd.Flags().String("workflow-instance", "", "SOP workflow run UUID (requires --workflow-stage; pass both flags as empty strings to detach from the SOP)")
+	issueUpdateCmd.Flags().String("workflow-stage", "", "SOP Stage UUID (requires --workflow-instance; pass both flags as empty strings to detach from the SOP)")
 	issueUpdateCmd.Flags().String("start-date", "", "New start date (calendar day, YYYY-MM-DD; pass empty string to clear)")
 	issueUpdateCmd.Flags().String("due-date", "", "New due date (calendar day, YYYY-MM-DD)")
 	issueUpdateCmd.Flags().String("parent", "", "Parent issue ID (use --parent \"\" to clear)")
@@ -1256,6 +1258,19 @@ func runIssueUpdate(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	}
+	workflowInstanceChanged := cmd.Flags().Changed("workflow-instance")
+	workflowStageChanged := cmd.Flags().Changed("workflow-stage")
+	if workflowInstanceChanged != workflowStageChanged {
+		return fmt.Errorf("--workflow-instance and --workflow-stage must be provided together")
+	}
+	workflowInstanceID, workflowStageID := "", ""
+	if workflowInstanceChanged {
+		workflowInstanceID, _ = cmd.Flags().GetString("workflow-instance")
+		workflowStageID, _ = cmd.Flags().GetString("workflow-stage")
+		if (workflowInstanceID == "") != (workflowStageID == "") {
+			return fmt.Errorf("--workflow-instance and --workflow-stage must both be non-empty to attach, or both be empty to detach")
+		}
+	}
 
 	client, err := newAPIClient(cmd)
 	if err != nil {
@@ -1305,6 +1320,15 @@ func runIssueUpdate(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("resolve project: %w", err)
 			}
 			body["project_id"] = project.ID
+		}
+	}
+	if workflowInstanceChanged {
+		if workflowInstanceID == "" {
+			body["workflow_instance_id"] = nil
+			body["workflow_stage_id"] = nil
+		} else {
+			body["workflow_instance_id"] = workflowInstanceID
+			body["workflow_stage_id"] = workflowStageID
 		}
 	}
 	if cmd.Flags().Changed("start-date") {

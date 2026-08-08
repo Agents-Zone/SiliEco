@@ -151,8 +151,10 @@ func init() {
 	projectResourceAddCmd.Flags().String("type", "github_repo", "Resource type (e.g. github_repo, local_directory — see docs)")
 	projectResourceAddCmd.Flags().String("url", "", "Shortcut: the repo URL (only used when --type github_repo)")
 	projectResourceAddCmd.Flags().String("default-branch-hint", "", "Shortcut: optional default branch hint (only used when --type github_repo)")
+	projectResourceAddCmd.Flags().Bool("primary", false, "Shortcut: make this the project's primary repository (only used when --type github_repo)")
 	projectResourceAddCmd.Flags().String("local-path", "", "Shortcut: absolute path to the working directory (only used when --type local_directory)")
 	projectResourceAddCmd.Flags().String("daemon-id", "", "Shortcut: id of the daemon that owns the local path (only used when --type local_directory)")
+	projectResourceAddCmd.Flags().String("repository-resource-id", "", "Shortcut: github_repo project resource id mapped by this local directory")
 	projectResourceAddCmd.Flags().String("ref-label", "", "Shortcut: optional label embedded in resource_ref (only used when --type local_directory)")
 	projectResourceAddCmd.Flags().String("ref", "", "Generic JSON resource_ref payload, or a github_repo checkout ref when used with --url")
 	projectResourceAddCmd.Flags().String("label", "", "Optional human-readable label")
@@ -162,8 +164,10 @@ func init() {
 	// optional so the caller can edit one thing at a time.
 	projectResourceUpdateCmd.Flags().String("url", "", "Shortcut: new repo URL (github_repo)")
 	projectResourceUpdateCmd.Flags().String("default-branch-hint", "", "Shortcut: new default branch hint (github_repo)")
+	projectResourceUpdateCmd.Flags().Bool("primary", false, "Shortcut: make this the project's primary repository (github_repo)")
 	projectResourceUpdateCmd.Flags().String("local-path", "", "Shortcut: new absolute local path (local_directory)")
 	projectResourceUpdateCmd.Flags().String("daemon-id", "", "Shortcut: new daemon id (local_directory)")
+	projectResourceUpdateCmd.Flags().String("repository-resource-id", "", "Shortcut: github_repo project resource id mapped by this local directory")
 	projectResourceUpdateCmd.Flags().String("ref-label", "", "Shortcut: new label embedded in resource_ref (local_directory)")
 	projectResourceUpdateCmd.Flags().String("ref", "", "Generic JSON resource_ref payload, or a github_repo checkout ref")
 	projectResourceUpdateCmd.Flags().String("label", "", "New human-readable label; pass an empty string to clear")
@@ -596,16 +600,12 @@ func runProjectResourceAdd(cmd *cobra.Command, args []string) error {
 			}
 			body["resource_ref"] = ref
 		case "local_directory":
-			pathVal, _ := cmd.Flags().GetString("local-path")
-			pathVal = strings.TrimSpace(pathVal)
-			daemonVal, _ := cmd.Flags().GetString("daemon-id")
-			daemonVal = strings.TrimSpace(daemonVal)
-			if pathVal == "" || daemonVal == "" {
-				return fmt.Errorf("local_directory requires --local-path and --daemon-id (or pass a JSON payload via --ref)")
+			ref, has, err := buildResourceRefFromFlags(cmd, resourceType, nil)
+			if err != nil {
+				return err
 			}
-			ref := map[string]any{"local_path": pathVal, "daemon_id": daemonVal}
-			if refLabel, _ := cmd.Flags().GetString("ref-label"); strings.TrimSpace(refLabel) != "" {
-				ref["label"] = strings.TrimSpace(refLabel)
+			if !has {
+				return fmt.Errorf("local_directory requires --local-path and --daemon-id (or pass a JSON payload via --ref)")
 			}
 			body["resource_ref"] = ref
 		default:
@@ -795,8 +795,9 @@ func buildResourceRefFromFlags(cmd *cobra.Command, resourceType string, existing
 	case "github_repo":
 		urlSet := cmd.Flags().Changed("url")
 		hintSet := cmd.Flags().Changed("default-branch-hint")
+		primarySet := cmd.Flags().Changed("primary")
 		refSet := cmd.Flags().Changed("ref")
-		if !urlSet && !hintSet && !refSet {
+		if !urlSet && !hintSet && !primarySet && !refSet {
 			return nil, false, nil
 		}
 		ref := map[string]any{}
@@ -811,6 +812,9 @@ func buildResourceRefFromFlags(cmd *cobra.Command, resourceType string, existing
 			}
 			if checkoutRef, ok := existingRef["ref"].(string); ok && strings.TrimSpace(checkoutRef) != "" {
 				ref["ref"] = strings.TrimSpace(checkoutRef)
+			}
+			if primary, ok := existingRef["primary"].(bool); ok && primary {
+				ref["primary"] = true
 			}
 		}
 		if urlSet {
@@ -837,6 +841,14 @@ func buildResourceRefFromFlags(cmd *cobra.Command, resourceType string, existing
 				ref["ref"] = checkoutRef
 			}
 		}
+		if primarySet {
+			primary, _ := cmd.Flags().GetBool("primary")
+			if primary {
+				ref["primary"] = true
+			} else {
+				delete(ref, "primary")
+			}
+		}
 		if _, ok := ref["url"]; !ok {
 			return nil, false, fmt.Errorf("github_repo: --url is required (no existing url to merge with)")
 		}
@@ -844,8 +856,9 @@ func buildResourceRefFromFlags(cmd *cobra.Command, resourceType string, existing
 	case "local_directory":
 		pathSet := cmd.Flags().Changed("local-path")
 		daemonSet := cmd.Flags().Changed("daemon-id")
+		repositorySet := cmd.Flags().Changed("repository-resource-id")
 		labelSet := cmd.Flags().Changed("ref-label")
-		if !pathSet && !daemonSet && !labelSet {
+		if !pathSet && !daemonSet && !repositorySet && !labelSet {
 			return nil, false, nil
 		}
 		ref := map[string]any{}
@@ -858,6 +871,9 @@ func buildResourceRefFromFlags(cmd *cobra.Command, resourceType string, existing
 			}
 			if l, ok := existingRef["label"].(string); ok && strings.TrimSpace(l) != "" {
 				ref["label"] = strings.TrimSpace(l)
+			}
+			if repositoryID, ok := existingRef["repository_resource_id"].(string); ok && strings.TrimSpace(repositoryID) != "" {
+				ref["repository_resource_id"] = strings.TrimSpace(repositoryID)
 			}
 		}
 		if pathSet {
@@ -873,6 +889,13 @@ func buildResourceRefFromFlags(cmd *cobra.Command, resourceType string, existing
 				return nil, false, fmt.Errorf("--daemon-id cannot be empty")
 			}
 			ref["daemon_id"] = daemonVal
+		}
+		if repositorySet {
+			repositoryID := strings.TrimSpace(mustString(cmd, "repository-resource-id"))
+			if repositoryID == "" {
+				return nil, false, fmt.Errorf("--repository-resource-id cannot be empty")
+			}
+			ref["repository_resource_id"] = repositoryID
 		}
 		if labelSet {
 			refLabel := strings.TrimSpace(mustString(cmd, "ref-label"))
@@ -892,7 +915,8 @@ func buildResourceRefFromFlags(cmd *cobra.Command, resourceType string, existing
 	default:
 		// Unknown type or empty (resource not found) — caller must use --ref.
 		if cmd.Flags().Changed("url") || cmd.Flags().Changed("default-branch-hint") ||
-			cmd.Flags().Changed("local-path") || cmd.Flags().Changed("daemon-id") ||
+			cmd.Flags().Changed("primary") || cmd.Flags().Changed("local-path") || cmd.Flags().Changed("daemon-id") ||
+			cmd.Flags().Changed("repository-resource-id") ||
 			cmd.Flags().Changed("ref-label") {
 			return nil, false, fmt.Errorf("no built-in shortcut for resource type %q; pass the full payload via --ref '<json>'", resourceType)
 		}

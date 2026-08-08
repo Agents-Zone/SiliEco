@@ -75,6 +75,26 @@ func TestFindLocalDirectoryAssignment(t *testing.T) {
 		}
 	})
 
+	t.Run("primary repository selects its mapping on this daemon", func(t *testing.T) {
+		secondaryPath := t.TempDir()
+		primaryPath := t.TempDir()
+		got, err := findLocalDirectoryAssignment([]ProjectResourceData{
+			{ID: "repo-secondary", ResourceType: "github_repo", ResourceRef: json.RawMessage(`{"url":"https://github.com/acme/secondary.git"}`)},
+			{ID: "repo-primary", ResourceType: "github_repo", ResourceRef: json.RawMessage(`{"url":"git@github.com:acme/primary.git","primary":true}`)},
+			{ID: "local-secondary", ResourceType: localDirectoryResourceType, ResourceRef: mkRef(t, localDirectoryRef{LocalPath: secondaryPath, DaemonID: thisDaemon, RepositoryResourceID: "repo-secondary"})},
+			{ID: "local-primary", ResourceType: localDirectoryResourceType, ResourceRef: mkRef(t, localDirectoryRef{LocalPath: primaryPath, DaemonID: thisDaemon, RepositoryResourceID: "repo-primary"})},
+		}, thisDaemon)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+		if got == nil || got.AbsPath != filepath.Clean(primaryPath) {
+			t.Fatalf("assignment = %+v, want primary path %q", got, primaryPath)
+		}
+		if got.RepositoryURL != "git@github.com:acme/primary.git" || !got.RepositoryPrimary {
+			t.Fatalf("repository metadata = (%q, %v), want primary repository", got.RepositoryURL, got.RepositoryPrimary)
+		}
+	})
+
 	t.Run("missing daemon_id is rejected", func(t *testing.T) {
 		_, err := findLocalDirectoryAssignment([]ProjectResourceData{
 			{ID: "r1", ResourceType: localDirectoryResourceType, ResourceRef: mkRef(t, localDirectoryRef{LocalPath: tmp})},
@@ -136,6 +156,19 @@ func TestFindLocalDirectoryAssignment(t *testing.T) {
 			t.Fatalf("expected assignment, got nil")
 		}
 	})
+}
+
+func TestCanonicalGitRemote(t *testing.T) {
+	want := "github.com/acme/videohub"
+	for _, remote := range []string{
+		"https://github.com/acme/VideoHub.git",
+		"ssh://git@github.com/acme/VideoHub.git",
+		"git@github.com:acme/VideoHub.git",
+	} {
+		if got := canonicalGitRemote(remote); got != want {
+			t.Errorf("canonicalGitRemote(%q) = %q, want %q", remote, got, want)
+		}
+	}
 }
 
 func TestAcquireLocalDirectoryLockSkipsSquadLeaderTasks(t *testing.T) {

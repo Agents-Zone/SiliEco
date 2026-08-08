@@ -26,6 +26,7 @@ var validWorkflowInstanceStatuses = map[string]bool{
 }
 
 type WorkflowStageInput struct {
+	ID               *string         `json:"id,omitempty"`
 	StableKey        string          `json:"stable_key"`
 	Name             string          `json:"name"`
 	Description      *string         `json:"description"`
@@ -118,26 +119,62 @@ type WorkflowStageResponse struct {
 }
 
 type WorkflowInstanceResponse struct {
-	ID                string                         `json:"id"`
-	WorkspaceID       string                         `json:"workspace_id"`
-	WorkflowID        string                         `json:"workflow_id"`
-	WorkflowVersionID string                         `json:"workflow_version_id"`
-	Title             string                         `json:"title"`
-	Description       *string                        `json:"description"`
-	Status            string                         `json:"status"`
-	CurrentStageID    *string                        `json:"current_stage_id"`
-	ProjectID         *string                        `json:"project_id"`
-	CreatedBy         string                         `json:"created_by"`
-	StartedAt         *string                        `json:"started_at"`
-	CompletedAt       *string                        `json:"completed_at"`
-	TaskCount         int64                          `json:"task_count"`
-	ArchivedAt        *string                        `json:"archived_at"`
-	ArchivedBy        *string                        `json:"archived_by"`
-	CreatedAt         string                         `json:"created_at"`
-	UpdatedAt         string                         `json:"updated_at"`
-	Stages            []WorkflowStageResponse        `json:"stages,omitempty"`
-	Tasks             []IssueResponse                `json:"tasks,omitempty"`
-	Decisions         []WorkflowGateDecisionResponse `json:"decisions,omitempty"`
+	ID                string                           `json:"id"`
+	WorkspaceID       string                           `json:"workspace_id"`
+	WorkflowID        string                           `json:"workflow_id"`
+	WorkflowVersionID string                           `json:"workflow_version_id"`
+	Title             string                           `json:"title"`
+	Description       *string                          `json:"description"`
+	Revision          int32                            `json:"revision"`
+	CanEdit           bool                             `json:"can_edit"`
+	SourceVersion     int32                            `json:"source_version"`
+	Status            string                           `json:"status"`
+	CurrentStageID    *string                          `json:"current_stage_id"`
+	CurrentStageName  *string                          `json:"current_stage_name"`
+	CurrentStageIndex *int32                           `json:"current_stage_index"`
+	StageCount        int32                            `json:"stage_count"`
+	ProjectID         *string                          `json:"project_id"`
+	CreatedBy         string                           `json:"created_by"`
+	StartedAt         *string                          `json:"started_at"`
+	CompletedAt       *string                          `json:"completed_at"`
+	TaskCount         int64                            `json:"task_count"`
+	ArchivedAt        *string                          `json:"archived_at"`
+	ArchivedBy        *string                          `json:"archived_by"`
+	CreatedAt         string                           `json:"created_at"`
+	UpdatedAt         string                           `json:"updated_at"`
+	Stages            []WorkflowInstanceStageResponse  `json:"stages,omitempty"`
+	Tasks             []IssueResponse                  `json:"tasks,omitempty"`
+	Decisions         []WorkflowGateDecisionResponse   `json:"decisions,omitempty"`
+	Changes           []WorkflowInstanceChangeResponse `json:"changes,omitempty"`
+}
+
+type WorkflowInstanceStageResponse struct {
+	ID                 string          `json:"id"`
+	WorkspaceID        string          `json:"workspace_id"`
+	WorkflowInstanceID string          `json:"workflow_instance_id"`
+	SourceStageID      *string         `json:"source_stage_id"`
+	StableKey          string          `json:"stable_key"`
+	Name               string          `json:"name"`
+	Description        *string         `json:"description"`
+	Position           int32           `json:"position"`
+	CompletionRule     json.RawMessage `json:"completion_rule"`
+	InputSpec          json.RawMessage `json:"input_spec"`
+	OutputSpec         json.RawMessage `json:"output_spec"`
+	RequiredSkills     []string        `json:"required_skills"`
+	Gate               json.RawMessage `json:"gate"`
+	RollbackStageKey   *string         `json:"rollback_stage_key"`
+	CreatedAt          string          `json:"created_at"`
+	UpdatedAt          string          `json:"updated_at"`
+}
+
+type WorkflowInstanceChangeResponse struct {
+	ID         string          `json:"id"`
+	Revision   int32           `json:"revision"`
+	ChangedBy  string          `json:"changed_by"`
+	ChangeNote *string         `json:"change_note"`
+	BeforePlan json.RawMessage `json:"before_plan"`
+	AfterPlan  json.RawMessage `json:"after_plan"`
+	CreatedAt  string          `json:"created_at"`
 }
 
 type WorkflowGateDecisionResponse struct {
@@ -216,6 +253,7 @@ func workflowInstanceToResponse(row db.WorkflowInstance) WorkflowInstanceRespons
 		WorkflowVersionID: uuidToString(row.WorkflowVersionID),
 		Title:             row.Title,
 		Description:       textToPtr(row.Description),
+		Revision:          row.Revision,
 		Status:            row.Status,
 		CurrentStageID:    uuidToPtr(row.CurrentStageID),
 		ProjectID:         uuidToPtr(row.ProjectID),
@@ -226,6 +264,30 @@ func workflowInstanceToResponse(row db.WorkflowInstance) WorkflowInstanceRespons
 		ArchivedBy:        uuidToPtr(row.ArchivedBy),
 		CreatedAt:         timestampToString(row.CreatedAt),
 		UpdatedAt:         timestampToString(row.UpdatedAt),
+	}
+}
+
+func workflowInstanceStageToResponse(row db.WorkflowInstanceStage) WorkflowInstanceStageResponse {
+	requiredSkills := row.RequiredSkills
+	if requiredSkills == nil {
+		requiredSkills = []string{}
+	}
+	return WorkflowInstanceStageResponse{
+		ID: uuidToString(row.ID), WorkspaceID: uuidToString(row.WorkspaceID),
+		WorkflowInstanceID: uuidToString(row.WorkflowInstanceID), SourceStageID: uuidToPtr(row.SourceStageID),
+		StableKey: row.StableKey, Name: row.Name, Description: textToPtr(row.Description), Position: row.Position,
+		CompletionRule: jsonOrEmptyObject(row.CompletionRule), InputSpec: jsonOrEmptyObject(row.InputSpec),
+		OutputSpec: jsonOrEmptyObject(row.OutputSpec), RequiredSkills: requiredSkills,
+		Gate: jsonOrEmptyObject(row.Gate), RollbackStageKey: textToPtr(row.RollbackStageKey),
+		CreatedAt: timestampToString(row.CreatedAt), UpdatedAt: timestampToString(row.UpdatedAt),
+	}
+}
+
+func workflowInstanceChangeToResponse(row db.WorkflowInstanceChange) WorkflowInstanceChangeResponse {
+	return WorkflowInstanceChangeResponse{
+		ID: uuidToString(row.ID), Revision: row.Revision, ChangedBy: uuidToString(row.ChangedBy),
+		ChangeNote: textToPtr(row.ChangeNote), BeforePlan: jsonOrEmptyObject(row.BeforePlan),
+		AfterPlan: jsonOrEmptyObject(row.AfterPlan), CreatedAt: timestampToString(row.CreatedAt),
 	}
 }
 
@@ -862,7 +924,7 @@ func (h *Handler) PublishWorkflowVersion(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *Handler) ListWorkflowInstances(w http.ResponseWriter, r *http.Request) {
-	_, _, wsUUID, ok := h.requireWorkflowMember(w, r)
+	_, userID, wsUUID, ok := h.requireWorkflowMember(w, r)
 	if !ok {
 		return
 	}
@@ -898,6 +960,10 @@ func (h *Handler) ListWorkflowInstances(w http.ResponseWriter, r *http.Request) 
 	resp := make([]WorkflowInstanceResponse, len(rows))
 	for i, row := range rows {
 		resp[i] = workflowInstanceToResponse(row)
+		if err := h.decorateWorkflowInstanceResponse(r.Context(), r, wsUUID, userID, row, &resp[i]); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to load workflow instance plan")
+			return
+		}
 		count, countErr := h.Queries.CountIssuesInWorkflowInstance(r.Context(), db.CountIssuesInWorkflowInstanceParams{
 			WorkspaceID: wsUUID, WorkflowInstanceID: row.ID,
 		})
@@ -983,10 +1049,10 @@ func (h *Handler) CreateWorkflowInstance(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusConflict, "workflow version is not published")
 		return
 	}
-	first, err := h.Queries.GetFirstWorkflowStage(r.Context(), db.GetFirstWorkflowStageParams{
+	templateStages, err := h.Queries.ListWorkflowStages(r.Context(), db.ListWorkflowStagesParams{
 		WorkflowVersionID: versionID, WorkspaceID: wsUUID,
 	})
-	if err != nil {
+	if err != nil || len(templateStages) == 0 {
 		writeError(w, http.StatusConflict, "workflow version has no stages")
 		return
 	}
@@ -995,32 +1061,78 @@ func (h *Handler) CreateWorkflowInstance(w http.ResponseWriter, r *http.Request)
 		start = *req.Start
 	}
 	status := "draft"
-	var currentStageID pgtype.UUID
 	if start {
 		status = "active"
-		currentStageID = first.ID
 	}
 	userUUID, err := util.ParseUUID(userID)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid user id")
 		return
 	}
-	row, err := h.Queries.CreateWorkflowInstance(r.Context(), db.CreateWorkflowInstanceParams{
+	tx, err := h.TxStarter.Begin(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to start workflow instance transaction")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	qtx := h.Queries.WithTx(tx)
+	row, err := qtx.CreateWorkflowInstance(r.Context(), db.CreateWorkflowInstanceParams{
 		WorkspaceID: wsUUID, WorkflowID: workflowID, WorkflowVersionID: versionID,
 		Title: req.Title, Description: ptrToText(req.Description), Status: status,
-		CurrentStageID: currentStageID, ProjectID: projectID, CreatedBy: userUUID,
+		CurrentStageID: pgtype.UUID{}, ProjectID: projectID, CreatedBy: userUUID,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create workflow instance")
 		return
 	}
+	instanceStages := make([]db.WorkflowInstanceStage, 0, len(templateStages))
+	for _, templateStage := range templateStages {
+		instanceStage, createErr := qtx.CreateWorkflowInstanceStage(r.Context(), db.CreateWorkflowInstanceStageParams{
+			WorkspaceID: wsUUID, WorkflowInstanceID: row.ID, SourceStageID: templateStage.ID,
+			StableKey: templateStage.StableKey, Name: templateStage.Name, Description: templateStage.Description,
+			Position: templateStage.Position, CompletionRule: templateStage.CompletionRule,
+			InputSpec: templateStage.InputSpec, OutputSpec: templateStage.OutputSpec,
+			RequiredSkills: templateStage.RequiredSkills, Gate: templateStage.Gate,
+			RollbackStageKey: templateStage.RollbackStageKey,
+		})
+		if createErr != nil {
+			writeError(w, http.StatusInternalServerError, "failed to create workflow instance plan")
+			return
+		}
+		instanceStages = append(instanceStages, instanceStage)
+	}
+	if start {
+		row, err = qtx.UpdateWorkflowInstanceState(r.Context(), db.UpdateWorkflowInstanceStateParams{
+			ID: row.ID, WorkspaceID: wsUUID, CurrentStageID: instanceStages[0].ID,
+		})
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to start workflow instance")
+			return
+		}
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to commit workflow instance")
+		return
+	}
 	resp := workflowInstanceToResponse(row)
+	resp.Stages = make([]WorkflowInstanceStageResponse, len(instanceStages))
+	for i, stage := range instanceStages {
+		resp.Stages[i] = workflowInstanceStageToResponse(stage)
+	}
+	resp.StageCount = int32(len(instanceStages))
+	resp.SourceVersion = version.Version
+	resp.CanEdit = h.canManageWorkflowInstance(r, userID, projectID)
+	if start {
+		resp.CurrentStageName = &instanceStages[0].Name
+		position := instanceStages[0].Position
+		resp.CurrentStageIndex = &position
+	}
 	h.publish(protocol.EventWorkflowInstanceCreated, workspaceID, "member", userID, map[string]any{"instance": resp})
 	writeJSON(w, http.StatusCreated, resp)
 }
 
 func (h *Handler) GetWorkflowInstance(w http.ResponseWriter, r *http.Request) {
-	_, _, wsUUID, ok := h.requireWorkflowMember(w, r)
+	_, userID, wsUUID, ok := h.requireWorkflowMember(w, r)
 	if !ok {
 		return
 	}
@@ -1036,16 +1148,20 @@ func (h *Handler) GetWorkflowInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := workflowInstanceToResponse(row)
-	stages, err := h.Queries.ListWorkflowStages(r.Context(), db.ListWorkflowStagesParams{
-		WorkflowVersionID: row.WorkflowVersionID, WorkspaceID: wsUUID,
+	stages, err := h.Queries.ListWorkflowInstanceStages(r.Context(), db.ListWorkflowInstanceStagesParams{
+		WorkflowInstanceID: row.ID, WorkspaceID: wsUUID,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to load workflow stages")
 		return
 	}
-	resp.Stages = make([]WorkflowStageResponse, len(stages))
+	resp.Stages = make([]WorkflowInstanceStageResponse, len(stages))
 	for i, stage := range stages {
-		resp.Stages[i] = workflowStageToResponse(stage)
+		resp.Stages[i] = workflowInstanceStageToResponse(stage)
+	}
+	if err := h.decorateWorkflowInstanceResponse(r.Context(), r, wsUUID, userID, row, &resp); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load workflow instance plan")
+		return
 	}
 	tasks, err := h.Queries.ListIssuesForWorkflowInstance(r.Context(), db.ListIssuesForWorkflowInstanceParams{
 		WorkspaceID: wsUUID, WorkflowInstanceID: instanceID,
@@ -1074,6 +1190,17 @@ func (h *Handler) GetWorkflowInstance(w http.ResponseWriter, r *http.Request) {
 	resp.Decisions = make([]WorkflowGateDecisionResponse, len(decisions))
 	for i, decision := range decisions {
 		resp.Decisions[i] = workflowDecisionToResponse(decision)
+	}
+	changes, err := h.Queries.ListWorkflowInstanceChanges(r.Context(), db.ListWorkflowInstanceChangesParams{
+		WorkflowInstanceID: instanceID, WorkspaceID: wsUUID,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load workflow changes")
+		return
+	}
+	resp.Changes = make([]WorkflowInstanceChangeResponse, len(changes))
+	for i, change := range changes {
+		resp.Changes[i] = workflowInstanceChangeToResponse(change)
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -1158,8 +1285,8 @@ func (h *Handler) TransitionWorkflowInstance(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusConflict, "workflow instance has no current stage")
 		return
 	}
-	current, err := h.Queries.GetWorkflowStageInVersion(r.Context(), db.GetWorkflowStageInVersionParams{
-		ID: instance.CurrentStageID, WorkflowVersionID: instance.WorkflowVersionID, WorkspaceID: wsUUID,
+	current, err := h.Queries.GetWorkflowInstanceStage(r.Context(), db.GetWorkflowInstanceStageParams{
+		ID: instance.CurrentStageID, WorkflowInstanceID: instance.ID, WorkspaceID: wsUUID,
 	})
 	if err != nil {
 		writeError(w, http.StatusConflict, "current workflow stage is invalid")
@@ -1188,7 +1315,7 @@ func (h *Handler) TransitionWorkflowInstance(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	var target db.WorkflowStage
+	var target db.WorkflowInstanceStage
 	var targetID pgtype.UUID
 	completing := false
 	if req.Outcome == "rejected" {
@@ -1197,8 +1324,8 @@ func (h *Handler) TransitionWorkflowInstance(w http.ResponseWriter, r *http.Requ
 			if !ok {
 				return
 			}
-			target, err = h.Queries.GetWorkflowStageInVersion(r.Context(), db.GetWorkflowStageInVersionParams{
-				ID: targetID, WorkflowVersionID: instance.WorkflowVersionID, WorkspaceID: wsUUID,
+			target, err = h.Queries.GetWorkflowInstanceStage(r.Context(), db.GetWorkflowInstanceStageParams{
+				ID: targetID, WorkflowInstanceID: instance.ID, WorkspaceID: wsUUID,
 			})
 			if err != nil || current.RollbackStageKey.String != target.StableKey {
 				writeError(w, http.StatusBadRequest, "target stage is not the configured rollback stage")
@@ -1210,16 +1337,16 @@ func (h *Handler) TransitionWorkflowInstance(w http.ResponseWriter, r *http.Requ
 		if !ok {
 			return
 		}
-		target, err = h.Queries.GetWorkflowStageInVersion(r.Context(), db.GetWorkflowStageInVersionParams{
-			ID: targetID, WorkflowVersionID: instance.WorkflowVersionID, WorkspaceID: wsUUID,
+		target, err = h.Queries.GetWorkflowInstanceStage(r.Context(), db.GetWorkflowInstanceStageParams{
+			ID: targetID, WorkflowInstanceID: instance.ID, WorkspaceID: wsUUID,
 		})
 		if err != nil || target.Position != current.Position+1 {
 			writeError(w, http.StatusBadRequest, "target stage must be the next stage")
 			return
 		}
 	} else {
-		target, err = h.Queries.GetNextWorkflowStage(r.Context(), db.GetNextWorkflowStageParams{
-			WorkflowVersionID: instance.WorkflowVersionID, WorkspaceID: wsUUID, Position: current.Position,
+		target, err = h.Queries.GetNextWorkflowInstanceStage(r.Context(), db.GetNextWorkflowInstanceStageParams{
+			WorkflowInstanceID: instance.ID, WorkspaceID: wsUUID, Position: current.Position,
 		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			completing = true
@@ -1399,8 +1526,8 @@ func (h *Handler) AttachWorkflowTask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "workflow run is not assigned to a project")
 		return
 	}
-	if _, err := h.Queries.GetWorkflowStageInVersion(r.Context(), db.GetWorkflowStageInVersionParams{
-		ID: stageID, WorkflowVersionID: instance.WorkflowVersionID, WorkspaceID: wsUUID,
+	if _, err := h.Queries.GetWorkflowInstanceStage(r.Context(), db.GetWorkflowInstanceStageParams{
+		ID: stageID, WorkflowInstanceID: instance.ID, WorkspaceID: wsUUID,
 	}); err != nil {
 		writeError(w, http.StatusBadRequest, "stage does not belong to this workflow instance")
 		return

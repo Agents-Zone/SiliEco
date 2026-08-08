@@ -25,6 +25,7 @@ import {
   Play,
   Plus,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   UserCheck,
@@ -34,6 +35,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useWorkspaceId } from "@silieco/core/hooks";
+import { useWorkspacePaths } from "@silieco/core/paths";
 import type {
   Agent,
   MemberWithUser,
@@ -90,12 +92,14 @@ import { ActorAvatar } from "../../common/actor-avatar";
 import { ContentEditor, ReadonlyContent } from "../../editor";
 import { matchesPinyin } from "../../editor/extensions/pinyin-match";
 import { useT } from "../../i18n";
+import { useNavigation } from "../../navigation";
 import {
   PickerEmpty,
   PickerItem,
   PickerSection,
   PropertyPicker,
 } from "../../issues/components/pickers/property-picker";
+import { WorkflowRunPlanDialog } from "./workflow-run-plan-dialog";
 
 type StageStatus = string;
 type CanonicalStageStatus = "backlog" | "todo" | "in_progress" | "in_review" | "done" | "blocked";
@@ -663,6 +667,8 @@ export function ProjectSopDesigner({
 }) {
   const { t } = useT("workflows");
   const workspaceId = useWorkspaceId();
+  const paths = useWorkspacePaths();
+  const navigation = useNavigation();
   const { data: availableWorkflows = [], isLoading } = useQuery(
     workflowListOptions(workspaceId, projectId),
   );
@@ -691,6 +697,7 @@ export function ProjectSopDesigner({
   }>();
   const [runName, setRunName] = useState("");
   const [runToArchive, setRunToArchive] = useState<WorkflowInstance>();
+  const [runToAdjust, setRunToAdjust] = useState<WorkflowInstance>();
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string>();
   const [editing, setEditing] = useState(false);
   const [editingScope, setEditingScope] = useState<"space" | "project">("space");
@@ -941,9 +948,15 @@ export function ProjectSopDesigner({
                     const workflow = workflows.find(
                       (item) => item.id === run.workflow_id,
                     );
-                    const currentStage = workflow?.current_version?.stages.find(
-                      (stage) => stage.id === run.current_stage_id,
-                    );
+                    const runProjectId = run.project_id ?? projectId;
+                    const canOpenRun =
+                      Boolean(runProjectId) &&
+                      (run.status === "active" || run.status === "waiting");
+                    const currentStageName =
+                      run.current_stage_name ??
+                      workflow?.current_version?.stages.find(
+                        (stage) => stage.id === run.current_stage_id,
+                      )?.name;
                     return (
                       <article
                         key={run.id}
@@ -970,6 +983,18 @@ export function ProjectSopDesigner({
                               <Badge variant="outline">
                                 {t(($) => $.designer.run_status[run.status])}
                               </Badge>
+                              {run.can_edit && (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  title={t(($) => $.designer.run_plan_action)}
+                                  aria-label={t(($) => $.designer.run_plan_action)}
+                                  onClick={() => setRunToAdjust(run)}
+                                >
+                                  <SlidersHorizontal className="size-3.5" />
+                                </Button>
+                              )}
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -991,13 +1016,53 @@ export function ProjectSopDesigner({
                           </div>
                           <p className="mt-1.5 flex items-center gap-1.5 text-caption text-muted-foreground">
                             <CircleDot className="size-3" />
-                            {currentStage?.name ?? t(($) => $.designer.no_current_stage)}
+                            {currentStageName ?? t(($) => $.designer.no_current_stage)}
                           </p>
-                          <p className="mt-1 text-micro text-muted-foreground">
-                            {t(($) => $.designer.run_task_count, {
-                              count: run.task_count,
-                            })}
-                          </p>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-micro text-muted-foreground">
+                            <span>
+                              {t(($) => $.designer.run_task_count, {
+                                count: run.task_count,
+                              })}
+                            </span>
+                            {run.stage_count > 0 && run.current_stage_index !== null && (
+                              <span>
+                                {t(($) => $.designer.run_plan_progress, {
+                                  current: run.current_stage_index + 1,
+                                  total: run.stage_count,
+                                })}
+                              </span>
+                            )}
+                            {run.source_version > 0 && (
+                              <span>
+                                {t(($) => $.designer.run_plan_source_version, {
+                                  version: run.source_version,
+                                })}
+                              </span>
+                            )}
+                            {run.revision > 1 && (
+                              <span>
+                                {t(($) => $.designer.run_plan_revision, {
+                                  revision: run.revision,
+                                })}
+                              </span>
+                            )}
+                          </div>
+                          {canOpenRun && runProjectId && (
+                            <Button
+                              type="button"
+                              variant="link"
+                              size="sm"
+                              className="mt-1 h-auto px-0 text-caption"
+                              onClick={() =>
+                                navigation.push(
+                                  paths.projectWorkflowRun(runProjectId, run.id),
+                                )
+                              }
+                            >
+                              {t(($) => $.designer.open_run_board)}
+                              <ChevronRight className="size-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </article>
                     );
@@ -1440,6 +1505,19 @@ export function ProjectSopDesigner({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+        {runToAdjust && (
+          <WorkflowRunPlanDialog
+            instanceId={runToAdjust.id}
+            sourceName={
+              workflows.find((workflow) => workflow.id === runToAdjust.workflow_id)?.name ??
+              t(($) => $.designer.unknown_sop)
+            }
+            open
+            onOpenChange={(open) => {
+              if (!open) setRunToAdjust(undefined);
+            }}
+          />
+        )}
         <AlertDialog
           open={Boolean(runToArchive)}
           onOpenChange={(open) => {

@@ -33,8 +33,10 @@ func newProjectResourceUpdateTestCmd() *cobra.Command {
 	c := &cobra.Command{Use: "update"}
 	c.Flags().String("url", "", "")
 	c.Flags().String("default-branch-hint", "", "")
+	c.Flags().Bool("primary", false, "")
 	c.Flags().String("local-path", "", "")
 	c.Flags().String("daemon-id", "", "")
+	c.Flags().String("repository-resource-id", "", "")
 	c.Flags().String("ref-label", "", "")
 	c.Flags().String("ref", "", "")
 	c.Flags().String("label", "", "")
@@ -271,13 +273,14 @@ func TestBuildResourceRefFromRefFlagKeepsJSONEscapeHatch(t *testing.T) {
 // behavior for local_directory: partial edits keep unmentioned fields from the
 // existing ref.
 func TestBuildResourceRefFromFlagsLocalDirectoryMerges(t *testing.T) {
-	t.Run("ref-label only edit preserves existing path + daemon", func(t *testing.T) {
+	t.Run("ref-label only edit preserves existing path + daemon + repository", func(t *testing.T) {
 		cmd := newProjectResourceUpdateTestCmd()
 		_ = cmd.Flags().Set("ref-label", "renamed")
 		existing := map[string]any{
-			"local_path": "/Users/foo/work/a",
-			"daemon_id":  "d1",
-			"label":      "old",
+			"local_path":             "/Users/foo/work/a",
+			"daemon_id":              "d1",
+			"repository_resource_id": "repo-1",
+			"label":                  "old",
 		}
 		ref, has, err := buildResourceRefFromFlags(cmd, "local_directory", existing)
 		if err != nil {
@@ -291,6 +294,9 @@ func TestBuildResourceRefFromFlagsLocalDirectoryMerges(t *testing.T) {
 		}
 		if ref["daemon_id"] != "d1" {
 			t.Errorf("daemon_id missing after merge: %v", ref["daemon_id"])
+		}
+		if ref["repository_resource_id"] != "repo-1" {
+			t.Errorf("repository_resource_id missing after merge: %v", ref["repository_resource_id"])
 		}
 		if ref["label"] != "renamed" {
 			t.Errorf("label not overridden: %v", ref["label"])
@@ -306,13 +312,30 @@ func TestBuildResourceRefFromFlagsLocalDirectoryMerges(t *testing.T) {
 		}
 	})
 
+	t.Run("standalone project directory does not require a repository", func(t *testing.T) {
+		cmd := newProjectResourceUpdateTestCmd()
+		_ = cmd.Flags().Set("local-path", "/Users/foo/work/no-git-project")
+		_ = cmd.Flags().Set("daemon-id", "d1")
+		ref, has, err := buildResourceRefFromFlags(cmd, "local_directory", nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !has || ref["local_path"] != "/Users/foo/work/no-git-project" {
+			t.Fatalf("standalone ref = %#v, has = %v", ref, has)
+		}
+		if _, linked := ref["repository_resource_id"]; linked {
+			t.Fatalf("standalone ref unexpectedly linked to a repository: %#v", ref)
+		}
+	})
+
 	t.Run("ref-label cleared on empty input", func(t *testing.T) {
 		cmd := newProjectResourceUpdateTestCmd()
 		_ = cmd.Flags().Set("ref-label", "")
 		existing := map[string]any{
-			"local_path": "/Users/foo/work/a",
-			"daemon_id":  "d1",
-			"label":      "to-clear",
+			"local_path":             "/Users/foo/work/a",
+			"daemon_id":              "d1",
+			"repository_resource_id": "repo-1",
+			"label":                  "to-clear",
 		}
 		ref, has, err := buildResourceRefFromFlags(cmd, "local_directory", existing)
 		if err != nil {

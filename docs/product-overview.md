@@ -144,6 +144,7 @@ App 通过 WebSocket 和查询缓存更新视图。
 - SOP Stage 看板按 Workflow Run 的 Stage 分列；
 - Stage 看板保留 Task 标题、编号、优先级、负责人、Project、SOP/Stage 和生命周期；
 - Stage 看板可以按生命周期状态筛选，并默认让待处理工作优先出现；
+- Stage 列采用独立纵向滚动，单列 Task 增多时不会撑高整个页面；
 - “我的 Task”用于查看分配给我、由我创建或由我的 Agent 负责的工作。
 
 ## 6. SOP、Workflow Run 与 Stage
@@ -187,6 +188,12 @@ Workflow Run 状态包括 draft、active、waiting、completed 和 cancelled。T
 显示 Project、SOP、运行和 Stage 的级联选择；当已发布 SOP 尚无运行时，可以直接
 创建默认具名运行。
 
+active 或 waiting 状态的运行允许管理员和 Project Lead 在不修改已发布 SOP Version
+的前提下微调本次运行计划，包括运行名称、说明、Stage 名称、产出物、Skills、Gate
+和回退目标。已完成 Stage 被锁定；当前 Stage 不可重排；已有 Task 或 Gate 决策的未来
+Stage 不可随意删除或重排；没有任务和决策的未来 Stage 可以新增、删除和排序。保存使用
+乐观修订号避免并发覆盖，并记录变更说明及前后计划快照。
+
 ### 看板切换
 
 Project Task 页面整合普通 Task 与 SOP：
@@ -195,6 +202,18 @@ Project Task 页面整合普通 Task 与 SOP：
 - “SOP Stage”模式选择一次 Workflow Run 后按 Stage 查看；
 - 拖动 Task 只改变 Stage 归属，不会隐式伪造 Task 的业务完成状态；
 - Gate 决策用于后续 Stage 流转管控，并保留决策人、结果与备注。
+- 当前 Stage 的审核区汇总 Task 完成情况，并提供批准进入下一 Stage、完成运行或回退操作。
+
+### Project 工作目录与 Git 映射
+
+Project 本地工作目录是一等运行资源，不依赖 Git。每台 Runtime 可以为同一个 Project
+配置自己的私有目录，Agent 在该 Runtime 执行 Project Task 时直接使用这个目录；路径和
+文件不会同步给 Space 中的其他成员，任务上下文也只包含当前 Runtime 自己的路径。
+
+远程 Git 仓库是可选的 Project 资源。关联仓库后，每台 Runtime 可以在该仓库下面配置
+一个已准备好的本地工作副本。Desktop 在保存仓库级映射前验证所选路径是 Git 根目录，
+并确认 `origin` 与远程仓库一致。仓库专属映射优先于 Project 默认工作目录；如果当前
+Runtime 没有仓库级映射，则回退到独立的 Project 工作目录，再没有时才使用临时 checkout。
 
 ## 7. Agent、Runtime 与 Daemon
 

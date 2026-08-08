@@ -6,6 +6,7 @@ import type {
   CreateWorkflowRequest,
   CreateWorkflowVersionRequest,
   TransitionWorkflowInstanceRequest,
+  UpdateWorkflowInstancePlanRequest,
   UpdateWorkflowRequest,
 } from "../types";
 import { workflowKeys } from "./queries";
@@ -129,6 +130,28 @@ export function useTransitionWorkflowInstance() {
       instanceId: string;
       data: TransitionWorkflowInstanceRequest;
     }) => api.transitionWorkflowInstance(instanceId, data),
+    onSettled: (_data, _error, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: workflowKeys.instance(workspaceId, variables.instanceId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: workflowKeys.instances(workspaceId),
+      });
+    },
+  });
+}
+
+export function useUpdateWorkflowInstancePlan() {
+  const queryClient = useQueryClient();
+  const workspaceId = useWorkspaceId();
+  return useMutation({
+    mutationFn: ({
+      instanceId,
+      data,
+    }: {
+      instanceId: string;
+      data: UpdateWorkflowInstancePlanRequest;
+    }) => api.updateWorkflowInstancePlan(instanceId, data),
     onSettled: (_data, _error, variables) => {
       queryClient.invalidateQueries({
         queryKey: workflowKeys.instance(workspaceId, variables.instanceId),

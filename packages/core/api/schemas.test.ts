@@ -17,7 +17,9 @@ import {
   EMPTY_CREATE_FEEDBACK_RESPONSE,
   EMPTY_INBOX_ITEMS,
   EMPTY_INBOX_UNREAD_SUMMARY,
+  EMPTY_WORKFLOW_INSTANCE,
   EMPTY_LIST_FILE_RESOURCES_RESPONSE,
+  EMPTY_LIST_PROJECT_RESOURCES_RESPONSE,
   EMPTY_SEARCH_PROJECTS_RESPONSE,
   EMPTY_USER,
   InboxItemListSchema,
@@ -25,6 +27,7 @@ import {
   IssueTriggerPreviewSchema,
   ListIssuesResponseSchema,
   ListFileResourcesResponseSchema,
+  ListProjectResourcesResponseSchema,
   ListPropertiesResponseSchema,
   MALFORMED_RUNTIME_MODEL_LIST_REQUEST,
   RuntimeModelListRequestSchema,
@@ -41,6 +44,45 @@ import {
   WorkflowSchema,
 } from "./schemas";
 import { parseWithFallback } from "./schema";
+
+describe("ListProjectResourcesResponseSchema", () => {
+  it("preserves repository mapping fields in resource_ref", () => {
+    const parsed = ListProjectResourcesResponseSchema.parse({
+      resources: [
+        {
+          id: "local-1",
+          project_id: "project-1",
+          workspace_id: "workspace-1",
+          resource_type: "local_directory",
+          resource_ref: {
+            local_path: "/work/project",
+            daemon_id: "daemon-1",
+            repository_resource_id: "repo-1",
+          },
+          label: null,
+          position: 1,
+          created_at: "2026-08-07T00:00:00Z",
+          created_by: "user-1",
+        },
+      ],
+      total: 1,
+    });
+    expect(
+      (parsed.resources[0]?.resource_ref as { repository_resource_id?: string })
+        .repository_resource_id,
+    ).toBe("repo-1");
+  });
+
+  it("falls back instead of exposing a malformed resource response", () => {
+    const parsed = parseWithFallback(
+      { resources: [{ id: 42 }], total: 1 },
+      ListProjectResourcesResponseSchema,
+      EMPTY_LIST_PROJECT_RESOURCES_RESPONSE,
+      { endpoint: "test" },
+    );
+    expect(parsed).toEqual(EMPTY_LIST_PROJECT_RESOURCES_RESPONSE);
+  });
+});
 
 const baseIssue = {
   id: "11111111-1111-1111-1111-111111111111",
@@ -279,6 +321,30 @@ describe("Workflow schemas", () => {
     });
     expect(parsed.tasks?.[0]?.status).toBe("todo");
     expect(parsed.current_stage_id).toBe("stage-1");
+    expect(parsed.revision).toBe(1);
+    expect(parsed.can_edit).toBe(false);
+  });
+
+  it("falls back when an SOP run plan revision has the wrong type", () => {
+    const parsed = parseWithFallback(
+      {
+        id: "instance-1",
+        workspace_id: "ws-1",
+        workflow_id: "workflow-1",
+        workflow_version_id: "version-1",
+        title: "Release 1.0",
+        description: null,
+        status: "active",
+        created_by: "user-1",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: "2026-01-01T00:00:00Z",
+        revision: "two",
+      },
+      WorkflowInstanceSchema,
+      EMPTY_WORKFLOW_INSTANCE,
+      { endpoint: "PATCH /api/workflow-instances/{id}/plan" },
+    );
+    expect(parsed).toEqual(EMPTY_WORKFLOW_INSTANCE);
   });
 });
 

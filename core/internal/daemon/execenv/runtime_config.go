@@ -140,6 +140,25 @@ func formatProjectResource(r ProjectResourceForEnv) string {
 			out += " — " + label
 		}
 		return out
+	case "local_directory":
+		var payload struct {
+			LocalPath            string `json:"local_path"`
+			RepositoryResourceID string `json:"repository_resource_id"`
+			Label                string `json:"label,omitempty"`
+		}
+		_ = json.Unmarshal(r.ResourceRef, &payload)
+		display := strings.TrimSpace(payload.Label)
+		if display == "" {
+			display = strings.TrimSpace(label)
+		}
+		if display == "" {
+			display = filepath.Base(payload.LocalPath)
+		}
+		out := fmt.Sprintf("**Local Git working copy**: %s (`%s`)", display, payload.LocalPath)
+		if payload.RepositoryResourceID != "" {
+			out += fmt.Sprintf(" — repository resource `%s`", payload.RepositoryResourceID)
+		}
+		return out
 	default:
 		ref := string(r.ResourceRef)
 		if ref == "" {

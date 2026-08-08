@@ -1223,6 +1223,38 @@ type WorkflowInstance struct {
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	ArchivedAt        pgtype.Timestamptz `json:"archived_at"`
 	ArchivedBy        pgtype.UUID        `json:"archived_by"`
+	Revision          int32              `json:"revision"`
+}
+
+type WorkflowInstanceChange struct {
+	ID                 pgtype.UUID        `json:"id"`
+	WorkspaceID        pgtype.UUID        `json:"workspace_id"`
+	WorkflowInstanceID pgtype.UUID        `json:"workflow_instance_id"`
+	Revision           int32              `json:"revision"`
+	ChangedBy          pgtype.UUID        `json:"changed_by"`
+	ChangeNote         pgtype.Text        `json:"change_note"`
+	BeforePlan         []byte             `json:"before_plan"`
+	AfterPlan          []byte             `json:"after_plan"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+}
+
+type WorkflowInstanceStage struct {
+	ID                 pgtype.UUID        `json:"id"`
+	WorkspaceID        pgtype.UUID        `json:"workspace_id"`
+	WorkflowInstanceID pgtype.UUID        `json:"workflow_instance_id"`
+	SourceStageID      pgtype.UUID        `json:"source_stage_id"`
+	StableKey          string             `json:"stable_key"`
+	Name               string             `json:"name"`
+	Description        pgtype.Text        `json:"description"`
+	Position           int32              `json:"position"`
+	CompletionRule     []byte             `json:"completion_rule"`
+	InputSpec          []byte             `json:"input_spec"`
+	OutputSpec         []byte             `json:"output_spec"`
+	RequiredSkills     []string           `json:"required_skills"`
+	Gate               []byte             `json:"gate"`
+	RollbackStageKey   pgtype.Text        `json:"rollback_stage_key"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 type WorkflowStage struct {

@@ -4,12 +4,13 @@ import { I18nProvider } from "@silieco/core/i18n/react";
 import enWorkflows from "../../locales/en/workflows.json";
 import { ProjectSopDesigner } from "./project-sop-designer";
 
-const { agents, archiveInstance, createInstance, createWorkflow, members, runs, skills, workflows } = vi.hoisted(() => ({
+const { agents, archiveInstance, createInstance, createWorkflow, members, navigateTo, runs, skills, workflows } = vi.hoisted(() => ({
   agents: { current: [] as unknown[] },
   archiveInstance: vi.fn(),
   createInstance: vi.fn(),
   createWorkflow: vi.fn(),
   members: { current: [] as unknown[] },
+  navigateTo: vi.fn(),
   runs: { current: [] as unknown[] },
   skills: { current: [] as unknown[] },
   workflows: { current: [] as unknown[] },
@@ -17,6 +18,17 @@ const { agents, archiveInstance, createInstance, createWorkflow, members, runs, 
 
 vi.mock("@silieco/core/hooks", () => ({
   useWorkspaceId: () => "workspace-1",
+}));
+
+vi.mock("@silieco/core/paths", () => ({
+  useWorkspacePaths: () => ({
+    projectWorkflowRun: (projectId: string, runId: string) =>
+      `/projects/${projectId}?run=${runId}`,
+  }),
+}));
+
+vi.mock("../../navigation", () => ({
+  useNavigation: () => ({ push: navigateTo }),
 }));
 
 vi.mock("@silieco/core/workflows", () => ({
@@ -83,6 +95,12 @@ vi.mock("../../editor", () => ({
   ReadonlyContent: ({ content }: { content: string }) => <div>{content}</div>,
 }));
 
+vi.mock("./workflow-run-plan-dialog", () => ({
+  WorkflowRunPlanDialog: ({ sourceName }: { sourceName: string }) => (
+    <div role="dialog">Adjusting {sourceName}</div>
+  ),
+}));
+
 function renderDesigner() {
   return render(
     <I18nProvider locale="en" resources={{ en: { workflows: enWorkflows } }}>
@@ -96,6 +114,7 @@ describe("ProjectSopDesigner", () => {
     createInstance.mockReset();
     archiveInstance.mockReset();
     createWorkflow.mockReset();
+    navigateTo.mockReset();
     agents.current = [];
     members.current = [
       {
@@ -189,6 +208,13 @@ describe("ProjectSopDesigner", () => {
         title: "Mobile rollout",
         status: "active",
         current_stage_id: "stage-build",
+        current_stage_name: "Build",
+        current_stage_index: 0,
+        stage_count: 1,
+        source_version: 1,
+        revision: 1,
+        can_edit: true,
+        task_count: 0,
       },
     ];
 
@@ -199,6 +225,10 @@ describe("ProjectSopDesigner", () => {
     expect(screen.getAllByText("Release SOP").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Build").length).toBeGreaterThan(0);
     expect(screen.getByText("Active")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open run board" }));
+    expect(navigateTo).toHaveBeenCalledWith("/projects/project-1?run=run-1");
+    fireEvent.click(screen.getByRole("button", { name: "Adjust this run" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Adjusting Release SOP");
   });
 
   it("loads the software template into a five-Stage SOP editor", () => {

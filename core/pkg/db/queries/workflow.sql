@@ -159,6 +159,11 @@ RETURNING *;
 SELECT * FROM workflow_instance
 WHERE id = $1 AND workspace_id = $2;
 
+-- name: LockWorkflowInstanceInWorkspace :one
+SELECT * FROM workflow_instance
+WHERE id = $1 AND workspace_id = $2
+FOR UPDATE;
+
 -- name: CreateWorkflowInstance :one
 INSERT INTO workflow_instance (
     workspace_id, workflow_id, workflow_version_id, title, description,
@@ -185,6 +190,103 @@ UPDATE workflow_instance SET
     updated_at = now()
 WHERE id = $1 AND workspace_id = $2
 RETURNING *;
+
+-- name: UpdateWorkflowInstancePlanMetadata :one
+UPDATE workflow_instance SET
+    title = $3,
+    description = $4,
+    revision = revision + 1,
+    updated_at = now()
+WHERE id = $1
+  AND workspace_id = $2
+  AND revision = $5
+RETURNING *;
+
+-- name: ListWorkflowInstanceStages :many
+SELECT * FROM workflow_instance_stage
+WHERE workflow_instance_id = $1 AND workspace_id = $2
+ORDER BY position ASC;
+
+-- name: GetWorkflowInstanceStage :one
+SELECT * FROM workflow_instance_stage
+WHERE id = $1
+  AND workflow_instance_id = $2
+  AND workspace_id = $3;
+
+-- name: GetFirstWorkflowInstanceStage :one
+SELECT * FROM workflow_instance_stage
+WHERE workflow_instance_id = $1 AND workspace_id = $2
+ORDER BY position ASC
+LIMIT 1;
+
+-- name: GetNextWorkflowInstanceStage :one
+SELECT * FROM workflow_instance_stage
+WHERE workflow_instance_id = $1
+  AND workspace_id = $2
+  AND position > $3
+ORDER BY position ASC
+LIMIT 1;
+
+-- name: GetWorkflowInstanceStageByStableKey :one
+SELECT * FROM workflow_instance_stage
+WHERE workflow_instance_id = $1
+  AND workspace_id = $2
+  AND stable_key = $3;
+
+-- name: CreateWorkflowInstanceStage :one
+INSERT INTO workflow_instance_stage (
+    workspace_id, workflow_instance_id, source_stage_id, stable_key, name,
+    description, position, completion_rule, input_spec, output_spec,
+    required_skills, gate, rollback_stage_key
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10,
+    $11, $12, $13
+) RETURNING *;
+
+-- name: ShiftWorkflowInstanceStagePositions :exec
+UPDATE workflow_instance_stage
+SET position = position + 1000,
+    updated_at = now()
+WHERE workflow_instance_id = $1 AND workspace_id = $2;
+
+-- name: UpdateWorkflowInstanceStage :one
+UPDATE workflow_instance_stage SET
+    stable_key = $4,
+    name = $5,
+    description = $6,
+    position = $7,
+    completion_rule = $8,
+    input_spec = $9,
+    output_spec = $10,
+    required_skills = $11,
+    gate = $12,
+    rollback_stage_key = $13,
+    updated_at = now()
+WHERE id = $1
+  AND workflow_instance_id = $2
+  AND workspace_id = $3
+RETURNING *;
+
+-- name: DeleteWorkflowInstanceStage :execrows
+DELETE FROM workflow_instance_stage
+WHERE id = $1
+  AND workflow_instance_id = $2
+  AND workspace_id = $3;
+
+-- name: CreateWorkflowInstanceChange :one
+INSERT INTO workflow_instance_change (
+    workspace_id, workflow_instance_id, revision, changed_by,
+    change_note, before_plan, after_plan
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6, $7
+) RETURNING *;
+
+-- name: ListWorkflowInstanceChanges :many
+SELECT * FROM workflow_instance_change
+WHERE workflow_instance_id = $1 AND workspace_id = $2
+ORDER BY revision DESC;
 
 -- name: CreateWorkflowGateDecision :one
 INSERT INTO workflow_gate_decision (
@@ -232,3 +334,10 @@ WHERE workspace_id = $1
   AND workflow_instance_id = $2
   AND workflow_stage_id = $3
   AND status NOT IN ('done', 'cancelled');
+
+-- name: CountIssuesByWorkflowStage :many
+SELECT workflow_stage_id, count(*)::bigint AS task_count
+FROM issue
+WHERE workspace_id = $1
+  AND workflow_instance_id = $2
+GROUP BY workflow_stage_id;

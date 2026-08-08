@@ -3998,6 +3998,18 @@ func (d *Daemon) acquireLocalDirectoryLockIfNeeded(ctx context.Context, task Tas
 		}
 		return nil, true
 	}
+	if err := validateLocalGitRepository(ctx, assignment); err != nil {
+		taskLog.Error("local_directory: Git repository validation failed", "error", err)
+		if failErr := d.reportTerminalTask(ctx, terminalTaskReport{
+			kind:          terminalTaskReportFail,
+			taskID:        task.ID,
+			errorMessage:  err.Error(),
+			failureReason: "local_directory_error",
+		}); failErr != nil {
+			taskLog.Error("fail task after local_directory Git validation error", "error", failErr)
+		}
+		return nil, true
+	}
 
 	// While the lock is contended the daemon would otherwise sit blocked on
 	// the path mutex with no signal back from the server — the main
@@ -4816,7 +4828,7 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		ProjectID:                        task.ProjectID,
 		ProjectTitle:                     task.ProjectTitle,
 		ProjectDescription:               task.ProjectDescription,
-		ProjectResources:                 convertProjectResourcesForEnv(task.ProjectResources),
+		ProjectResources:                 convertProjectResourcesForEnv(task.ProjectResources, d.cfg.DaemonID),
 		ChatSessionID:                    task.ChatSessionID,
 		ChatChannelType:                  task.ChatChannelType,
 		AutopilotRunID:                   task.AutopilotRunID,
@@ -6291,18 +6303,24 @@ func convertReposForEnv(repos []RepoData) []execenv.RepoContextForEnv {
 	return result
 }
 
-func convertProjectResourcesForEnv(resources []ProjectResourceData) []execenv.ProjectResourceForEnv {
+func convertProjectResourcesForEnv(resources []ProjectResourceData, daemonID string) []execenv.ProjectResourceForEnv {
 	if len(resources) == 0 {
 		return nil
 	}
-	result := make([]execenv.ProjectResourceForEnv, len(resources))
-	for i, r := range resources {
-		result[i] = execenv.ProjectResourceForEnv{
+	result := make([]execenv.ProjectResourceForEnv, 0, len(resources))
+	for _, r := range resources {
+		if r.ResourceType == localDirectoryResourceType {
+			var ref localDirectoryRef
+			if err := json.Unmarshal(r.ResourceRef, &ref); err != nil || ref.DaemonID != daemonID {
+				continue
+			}
+		}
+		result = append(result, execenv.ProjectResourceForEnv{
 			ID:           r.ID,
 			ResourceType: r.ResourceType,
 			ResourceRef:  r.ResourceRef,
 			Label:        r.Label,
-		}
+		})
 	}
 	return result
 }

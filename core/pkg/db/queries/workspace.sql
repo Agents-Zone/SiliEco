@@ -199,6 +199,12 @@ cleared_client_usage_workspace AS (
 cleared_workflow_gate_decisions AS (
     DELETE FROM workflow_gate_decision WHERE workspace_id = $1
 ),
+cleared_workflow_instance_changes AS (
+    DELETE FROM workflow_instance_change WHERE workspace_id = $1
+),
+cleared_workflow_instance_stages AS (
+    DELETE FROM workflow_instance_stage WHERE workspace_id = $1
+),
 cleared_workflow_instances AS (
     DELETE FROM workflow_instance WHERE workspace_id = $1
 ),

@@ -3,7 +3,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { FolderOpen } from "lucide-react";
 import { projectResourcesOptions } from "@silieco/core/projects";
-import type { LocalDirectoryResourceRef, ProjectResource } from "@silieco/core/types";
+import type {
+  GithubRepoResourceRef,
+  LocalDirectoryResourceRef,
+  ProjectResource,
+} from "@silieco/core/types";
 import { useWorkspaceId } from "@silieco/core/hooks";
 import { useLocalDaemonStatus } from "../../platform";
 import { useT } from "../../i18n";
@@ -37,13 +41,31 @@ export function LocalDirectoryHint({
   if (!projectId) return null;
   if (!daemon.daemonId) return null;
 
-  const matches: Array<ProjectResource & { resource_ref: LocalDirectoryResourceRef }> =
-    resources
-      .filter(
-        (r): r is ProjectResource & { resource_ref: LocalDirectoryResourceRef } =>
-          r.resource_type === "local_directory",
+  const repositories = resources.filter(
+    (resource): resource is ProjectResource & { resource_ref: GithubRepoResourceRef } =>
+      resource.resource_type === "github_repo",
+  );
+  const primaryRepositoryId =
+    repositories.find((resource) => resource.resource_ref.primary)?.id ??
+    repositories[0]?.id;
+  const localDirectories = resources
+    .filter(
+      (r): r is ProjectResource & { resource_ref: LocalDirectoryResourceRef } =>
+        r.resource_type === "local_directory" &&
+        r.resource_ref.daemon_id === daemon.daemonId,
+    );
+  const repositoryMatches = primaryRepositoryId
+    ? localDirectories.filter(
+        (resource) =>
+          resource.resource_ref.repository_resource_id === primaryRepositoryId,
       )
-      .filter((r) => r.resource_ref.daemon_id === daemon.daemonId);
+    : [];
+  const matches =
+    repositoryMatches.length > 0
+      ? repositoryMatches
+      : localDirectories.filter(
+          (resource) => !resource.resource_ref.repository_resource_id,
+        );
 
   if (matches.length === 0) return null;
 
@@ -63,6 +85,7 @@ export function LocalDirectoryHint({
               {t(($) => $.resources.chat_hint_prefix)}
               <span className="font-medium text-foreground"> {label} </span>
               <span className="font-mono opacity-70">({ref.local_path})</span>
+              <span> {t(($) => $.resources.chat_hint_suffix)}</span>
             </span>
           </div>
         );

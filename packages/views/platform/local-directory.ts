@@ -20,15 +20,25 @@ export type ValidateLocalDirectoryResult = {
     | "not_a_directory"
     | "not_readable"
     | "not_writable"
+    | "not_git_repository"
+    | "not_git_root"
+    | "missing_origin"
+    | "origin_mismatch"
+    | "git_unavailable"
     | "error"
     | "unsupported";
   error?: string;
+  repositoryRoot?: string;
+  originUrl?: string;
+  branch?: string;
+  dirty?: boolean;
 };
 
 interface DesktopLocalDirectoryAPI {
   pickDirectory?: (defaultPath?: string) => Promise<PickDirectoryResult>;
   validateLocalDirectory?: (
     path: string,
+    expectedRepositoryUrl?: string,
   ) => Promise<ValidateLocalDirectoryResult>;
 }
 
@@ -57,8 +67,9 @@ export async function pickDirectory(
 
 export async function validateLocalDirectory(
   path: string,
+  expectedRepositoryUrl?: string,
 ): Promise<ValidateLocalDirectoryResult> {
   const api = readDesktopAPI();
   if (!api?.validateLocalDirectory) return { ok: false, reason: "unsupported" };
-  return api.validateLocalDirectory(path);
+  return api.validateLocalDirectory(path, expectedRepositoryUrl);
 }

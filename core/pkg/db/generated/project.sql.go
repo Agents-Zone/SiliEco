@@ -131,6 +131,46 @@ func (q *Queries) DeleteProjectWorkflowGateDecisions(ctx context.Context, arg De
 	return err
 }
 
+const deleteProjectWorkflowInstanceChanges = `-- name: DeleteProjectWorkflowInstanceChanges :exec
+DELETE FROM workflow_instance_change AS change
+WHERE change.workspace_id = $1
+  AND workflow_instance_id IN (
+      SELECT instance.id FROM workflow_instance AS instance
+      WHERE instance.project_id = $2
+        AND instance.workspace_id = $1
+  )
+`
+
+type DeleteProjectWorkflowInstanceChangesParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ProjectID   pgtype.UUID `json:"project_id"`
+}
+
+func (q *Queries) DeleteProjectWorkflowInstanceChanges(ctx context.Context, arg DeleteProjectWorkflowInstanceChangesParams) error {
+	_, err := q.db.Exec(ctx, deleteProjectWorkflowInstanceChanges, arg.WorkspaceID, arg.ProjectID)
+	return err
+}
+
+const deleteProjectWorkflowInstanceStages = `-- name: DeleteProjectWorkflowInstanceStages :exec
+DELETE FROM workflow_instance_stage AS stage
+WHERE stage.workspace_id = $1
+  AND workflow_instance_id IN (
+      SELECT instance.id FROM workflow_instance AS instance
+      WHERE instance.project_id = $2
+        AND instance.workspace_id = $1
+  )
+`
+
+type DeleteProjectWorkflowInstanceStagesParams struct {
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+	ProjectID   pgtype.UUID `json:"project_id"`
+}
+
+func (q *Queries) DeleteProjectWorkflowInstanceStages(ctx context.Context, arg DeleteProjectWorkflowInstanceStagesParams) error {
+	_, err := q.db.Exec(ctx, deleteProjectWorkflowInstanceStages, arg.WorkspaceID, arg.ProjectID)
+	return err
+}
+
 const deleteProjectWorkflowInstances = `-- name: DeleteProjectWorkflowInstances :exec
 DELETE FROM workflow_instance
 WHERE project_id = $1

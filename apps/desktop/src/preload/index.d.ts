@@ -91,6 +91,7 @@ interface DesktopAPI {
    *  Mirrors the daemon's runtime check so the user sees errors before submit. */
   validateLocalDirectory: (
     path: string,
+    expectedRepositoryUrl?: string,
   ) => Promise<{
     ok: boolean;
     reason?:
@@ -99,8 +100,17 @@ interface DesktopAPI {
       | "not_a_directory"
       | "not_readable"
       | "not_writable"
+      | "not_git_repository"
+      | "not_git_root"
+      | "missing_origin"
+      | "origin_mismatch"
+      | "git_unavailable"
       | "error";
     error?: string;
+    repositoryRoot?: string;
+    originUrl?: string;
+    branch?: string;
+    dirty?: boolean;
   }>;
   /** Listen for Cmd/Ctrl+W tab-close requests from the main process.
    *  Returns an unsubscribe function. */

@@ -49,6 +49,7 @@ function makeLocalDirectoryResource(overrides: {
   daemon_id: string;
   local_path: string;
   label?: string;
+  repository_resource_id?: string;
 }): ProjectResource {
   return {
     id: `res-${overrides.local_path}`,
@@ -59,6 +60,9 @@ function makeLocalDirectoryResource(overrides: {
       daemon_id: overrides.daemon_id,
       local_path: overrides.local_path,
       ...(overrides.label ? { label: overrides.label } : {}),
+      ...(overrides.repository_resource_id
+        ? { repository_resource_id: overrides.repository_resource_id }
+        : {}),
     },
     label: null,
     position: 0,
@@ -113,6 +117,7 @@ describe("LocalDirectoryHint", () => {
       expect(screen.getByText("work")).toBeInTheDocument();
     });
     expect(screen.getByText(/Users\/foo\/work/)).toBeInTheDocument();
+    expect(screen.getByText(/Files aren't synced to the workspace/)).toBeInTheDocument();
   });
 
   it("ignores resources pinned to a different daemon", async () => {
@@ -133,5 +138,37 @@ describe("LocalDirectoryHint", () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(container.querySelector("div[class*='rounded-md']")).toBeNull();
+  });
+
+  it("uses the standalone project directory when the primary repo has no mapping", async () => {
+    mockDaemonStatus.daemonId = "daemon-A";
+    mockDaemonStatus.running = true;
+    mockListResources.mockResolvedValue({
+      resources: [
+        {
+          id: "repo-1",
+          project_id: "proj-1",
+          workspace_id: "ws-1",
+          resource_type: "github_repo",
+          resource_ref: { url: "https://github.com/acme/project", primary: true },
+          label: null,
+          position: 0,
+          created_at: new Date(0).toISOString(),
+          created_by: null,
+        },
+        makeLocalDirectoryResource({
+          daemon_id: "daemon-A",
+          local_path: "/Users/foo/general-project",
+          label: "general project",
+        }),
+      ],
+      total: 2,
+    });
+
+    renderHint("proj-1");
+
+    await waitFor(() => {
+      expect(screen.getByText("general project")).toBeInTheDocument();
+    });
   });
 });

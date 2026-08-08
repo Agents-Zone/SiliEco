@@ -29,6 +29,25 @@ export interface WorkflowStage {
   created_at: string;
 }
 
+export interface WorkflowInstanceStage {
+  id: string;
+  workspace_id: string;
+  workflow_instance_id: string;
+  source_stage_id: string | null;
+  stable_key: string;
+  name: string;
+  description: string | null;
+  position: number;
+  completion_rule: WorkflowObject;
+  input_spec: WorkflowObject;
+  output_spec: WorkflowObject;
+  required_skills: string[];
+  gate: WorkflowObject & { type?: WorkflowGateType };
+  rollback_stage_key: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface WorkflowVersion {
   id: string;
   workspace_id: string;
@@ -74,8 +93,14 @@ export interface WorkflowInstance {
   workflow_version_id: string;
   title: string;
   description: string | null;
+  revision: number;
+  can_edit: boolean;
+  source_version: number;
   status: WorkflowInstanceStatus;
   current_stage_id: string | null;
+  current_stage_name: string | null;
+  current_stage_index: number | null;
+  stage_count: number;
   project_id: string | null;
   created_by: string;
   started_at: string | null;
@@ -85,12 +110,24 @@ export interface WorkflowInstance {
   archived_by: string | null;
   created_at: string;
   updated_at: string;
-  stages?: WorkflowStage[];
+  stages?: WorkflowInstanceStage[];
   tasks?: Task[];
   decisions?: WorkflowGateDecision[];
+  changes?: WorkflowInstanceChange[];
+}
+
+export interface WorkflowInstanceChange {
+  id: string;
+  revision: number;
+  changed_by: string;
+  change_note: string | null;
+  before_plan: WorkflowObject;
+  after_plan: WorkflowObject;
+  created_at: string;
 }
 
 export interface WorkflowStageInput {
+  id?: string;
   stable_key?: string;
   name: string;
   description?: string | null;
@@ -100,6 +137,14 @@ export interface WorkflowStageInput {
   required_skills?: string[];
   gate?: WorkflowObject & { type?: WorkflowGateType };
   rollback_stage_key?: string | null;
+}
+
+export interface UpdateWorkflowInstancePlanRequest {
+  expected_revision: number;
+  title: string;
+  description?: string | null;
+  change_note?: string | null;
+  stages: WorkflowStageInput[];
 }
 
 export interface CreateWorkflowRequest {

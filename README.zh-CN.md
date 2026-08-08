@@ -82,11 +82,25 @@ SOP 是可复用的流程定义，Workflow Run 是某个已发布 SOP 的一次�
 
 * 文件引用的创建和移除遵循 Space 成员及 Project 管理权限；仍被引用的源文件不会被误删除。
 
+### Project 运行目录与 Git 仓库
+
+* Project 可以直接为每台 Runtime 配置私有的本地工作目录，不要求 Project 必须关联 Git 仓库。
+
+* 关联远程 Git 仓库后，可以在仓库下面为 Ryan 的 Mac、Alice 的 Mac 等不同 Runtime 分别配置本地工作副本；仓库专属映射优先于 Project 默认工作目录。
+
+* Desktop 会验证仓库级本地目录是 Git 根目录，并确认 `origin` 与远程仓库一致；独立 Project 工作目录只要求路径可读写。
+
+* 本地路径和文件不会同步给 Space 中的其他成员。其他成员只看到机器、所有者、在线状态以及是否已配置，Agent 也只接收当前 Runtime 自己的路径。
+
 ### SOP、Workflow 与 Stage
 
 * Project 级 SOP，可处于草稿、已发布或已归档状态。
 
 * 已发布版本不可变；每次 Workflow Run 可以单独命名，便于同时识别多个运行实例。
+
+* active 或 waiting 状态的 Workflow Run 可以安全微调运行名称、说明、Stage 产出物、Skills 与 Gate；已完成 Stage 保持锁定，含 Task 或 Gate 决策的未来 Stage 不能随意删除或重排。
+
+* 没有 Task 和 Gate 决策的未来 Stage 可以新增、删除或调整顺序，保存时使用修订号防止多人覆盖，并记录变更说明与前后计划快照。
 
 * Stage 可配置顺序、输入、输出、所需 Skills、允许的 Task 状态、回退目标，以及 人工、Agent 或人机联合门禁。
 
@@ -97,6 +111,8 @@ SOP 是可复用的流程定义，Workflow Run 是某个已发布 SOP 的一次�
 * 现有 Project Task 可以绑定到 Workflow，并在不同 Stage 之间移动。
 
 * Stage 看板对齐普通 Task 看板的信息密度，显示 Task 当前生命周期，并支持状态 筛选和待办优先排序。
+
+* Stage 看板按列独立纵向滚动，Task 数量较多时不会撑高整个页面；当前 Stage 提供人工审核、进入下一 Stage、完成运行或回退操作。
 
 ### 人机协作与群聊
 

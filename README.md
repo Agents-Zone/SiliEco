@@ -97,6 +97,10 @@ either dimension.
   states. A Project can run the shared definition directly or inherit it into
   an independently adjustable Project variant.
 - Immutable published versions and separately named Workflow Runs.
+- Active or waiting Workflow Runs can be safely adjusted without mutating the
+  published SOP version: managers may edit run metadata, artifacts, Skills,
+  gates, and unused future Stages. Completed Stages stay locked, revisions
+  prevent concurrent overwrites, and each change keeps before/after snapshots.
 - Ordered Stages with input/output descriptions, required Skills, allowed Task
   statuses, rollback targets, and human/Agent/hybrid gates.
 - Preset SOP templates for bid delivery, software development, bug fixing,
@@ -105,7 +109,23 @@ either dimension.
   published SOP can create a run when none exists.
 - Existing Project Tasks can be attached to a Workflow and moved across Stages.
 - Stage boards show the same Task metadata and lifecycle status as the normal
-  Task board, with status filtering and todo-first ordering.
+  Task board, with status filtering, todo-first ordering, and independent
+  vertical scrolling per Stage column.
+- The current Stage exposes its review state and lets authorized reviewers
+  approve progression, complete the run, or reject back to its rollback Stage.
+
+### Project working directories and Git repositories
+
+- A Project can map a private local working directory for each Runtime without
+  requiring a Git repository.
+- When a remote Git repository is attached, each Runtime can optionally map its
+  own prepared local clone beneath that repository. Repository-specific mappings
+  take precedence over the Project's standalone working directory.
+- Desktop validates repository mappings against the selected Git root and its
+  `origin`; standalone directories only need to be readable and writable.
+- Local paths and files are never synchronized to other Space members. Other
+  people see machine ownership and availability, while Agents receive only the
+  path belonging to the Runtime executing their Task.
 
 ### Human–Agent collaboration
 

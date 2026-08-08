@@ -28,8 +28,8 @@ A project's `description` is also durable context: when an issue (or a quick-cre
 
 Common resource types:
 
-- `github_repo` — durable GitHub repo context, with `resource_ref.url`, optional checkout `ref`, and optional prompt-only `default_branch_hint`;
-- `local_directory` — daemon-local path context, with `resource_ref.local_path`, `daemon_id`, and optional label.
+- `github_repo` — durable remote Git context, with `resource_ref.url`, optional checkout `ref`, optional prompt-only `default_branch_hint`, and `primary` when it is the project's default execution repository;
+- `local_directory` — a private daemon-local project working directory, with `resource_ref.local_path`, `daemon_id`, and optional label. When it represents a clone of an attached repository, `repository_resource_id` maps it beneath that `github_repo`; projects without Git keep it standalone. It is not synchronized to other workspace members.
 
 ## CLI
 
@@ -44,7 +44,9 @@ silieco project update <project-id> --start-date "" --output json   # clear the 
 silieco project status <project-id> in_progress --output json
 silieco project resource list <project-id> --output json
 silieco project resource add <project-id> --type github_repo --url <github-url> --output json
+silieco project resource add <project-id> --type github_repo --url <github-url> --primary --output json
 silieco project resource add <project-id> --type github_repo --url <github-url> --ref <branch-or-sha> --output json
+silieco project resource add <project-id> --type local_directory --local-path <abs-path> --daemon-id <daemon-id> --repository-resource-id <github-resource-id> --output json
 silieco project resource add <project-id> --type local_directory --local-path <abs-path> --daemon-id <daemon-id> --output json
 silieco project resource update <project-id> <resource-id> --url <new-github-url> --output json
 silieco project resource update <project-id> <resource-id> --ref <branch-or-sha> --output json
@@ -66,7 +68,7 @@ is task-local checkout state.
 
 1. `silieco project get <project-id> --output json`.
 2. `silieco project resource list <project-id> --output json`.
-3. Check `github_repo.resource_ref.url`, optional `ref`, `default_branch_hint`, and `local_directory.resource_ref.daemon_id`.
+3. Check `github_repo.resource_ref.url`, optional `ref`, `default_branch_hint`, and `primary`; then verify the current daemon's `local_directory.repository_resource_id` points to that repository.
 4. Updating resources is a durable mutation. After an update, listing the
    resource is the verification path.
 5. If resources match the expected task context, inspect runtime/repo checkout

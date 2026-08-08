@@ -69,8 +69,8 @@ The runtime brief lists repos available to this task. Treat that list as the aut
 Workspace repos and project resources are not the same thing:
 
 - workspace repo metadata can appear in workspace context;
-- `github_repo` project resources are durable project context and can affect future tasks; optional `resource_ref.ref` pins the default checkout ref for tasks in that project;
-- `local_directory` resources point at a path owned by a daemon and carry local-machine assumptions.
+- `github_repo` project resources are durable project context and can affect future tasks; optional `resource_ref.ref` pins the default checkout ref and `primary` selects the repository used for in-place execution;
+- a `local_directory` can be a standalone project working directory or map one repository resource to a path owned by one daemon. Repository mappings validate Git `origin`; standalone mappings support projects with no Git repository. The daemon never exposes another machine's path as task context.
 
 Do not add a project resource just because `repo checkout` failed. First determine whether the user asked for durable project context or just a task checkout.
 

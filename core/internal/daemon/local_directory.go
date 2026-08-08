@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,9 +24,15 @@ const localDirectoryResourceType = "local_directory"
 // project resources. Defined locally so the daemon does not have to import
 // the server handler package.
 type localDirectoryRef struct {
-	LocalPath string `json:"local_path"`
-	DaemonID  string `json:"daemon_id"`
-	Label     string `json:"label,omitempty"`
+	LocalPath            string `json:"local_path"`
+	DaemonID             string `json:"daemon_id"`
+	RepositoryResourceID string `json:"repository_resource_id"`
+	Label                string `json:"label,omitempty"`
+}
+
+type projectGithubRepoRef struct {
+	URL     string `json:"url"`
+	Primary bool   `json:"primary,omitempty"`
 }
 
 // localDirectoryAssignment is the resolved view of a task's local_directory
@@ -35,9 +42,11 @@ type localDirectoryRef struct {
 // absolute path; the path mutex keys on it so two different routes to the
 // same directory are serialised.
 type localDirectoryAssignment struct {
-	Ref      localDirectoryRef
-	AbsPath  string // user-provided path, cleaned but not symlink-resolved
-	RealPath string // canonical key for the path mutex
+	Ref               localDirectoryRef
+	RepositoryURL     string
+	RepositoryPrimary bool
+	AbsPath           string // user-provided path, cleaned but not symlink-resolved
+	RealPath          string // canonical key for the path mutex
 }
 
 // localDirectoryAssignmentForTask returns the local_directory assignment a task
@@ -56,16 +65,30 @@ func localDirectoryAssignmentForTask(task Task, daemonID string) (*localDirector
 // (without error) when no such resource exists — the task takes the regular
 // github_repo / worktree code path. Returns an error only when the matching
 // resource is structurally broken (bad JSON, missing fields) OR when more
-// than one resource is pinned to this daemon — that's a server-side
-// invariant violation, and silently picking the first match would let the
-// agent write into an arbitrary directory the user didn't intend.
-//
-// Server-side `findLocalDirectoryConflict` enforces a single local_directory
-// per (project, daemon), so two matches here means either the constraint
-// was bypassed (older API client) or the data was corrupted. Either way,
-// fail fast rather than guess.
+// than one resource maps the primary repository to this daemon. The server
+// allows one mapping per (repository, daemon), so silently picking between
+// duplicates would let the agent write into an arbitrary directory.
 func findLocalDirectoryAssignment(resources []ProjectResourceData, daemonID string) (*localDirectoryAssignment, error) {
+	primaryRepositoryID := ""
+	primaryRepositoryURL := ""
+	for _, resource := range resources {
+		if resource.ResourceType != "github_repo" {
+			continue
+		}
+		var ref projectGithubRepoRef
+		if err := json.Unmarshal(resource.ResourceRef, &ref); err != nil {
+			return nil, fmt.Errorf("github_repo: parse resource_ref: %w", err)
+		}
+		if primaryRepositoryID == "" || ref.Primary {
+			primaryRepositoryID = resource.ID
+			primaryRepositoryURL = strings.TrimSpace(ref.URL)
+		}
+		if ref.Primary {
+			break
+		}
+	}
 	var match *localDirectoryAssignment
+	var legacyMatch *localDirectoryAssignment
 	for _, r := range resources {
 		if r.ResourceType != localDirectoryResourceType {
 			continue
@@ -84,14 +107,23 @@ func findLocalDirectoryAssignment(resources []ProjectResourceData, daemonID stri
 			// per daemon, and other daemons will resolve their own row.
 			continue
 		}
-		if match != nil {
+		ref.RepositoryResourceID = strings.TrimSpace(ref.RepositoryResourceID)
+		legacy := ref.RepositoryResourceID == ""
+		if !legacy && ref.RepositoryResourceID != primaryRepositoryID {
+			continue
+		}
+		current := match
+		if legacy {
+			current = legacyMatch
+		}
+		if current != nil {
 			// Server-side invariant: at most one local_directory per
-			// (project, daemon). Two matches here means the constraint
+			// (repository, daemon). Two matches here means the constraint
 			// was bypassed by an older API client or by direct DB writes.
 			// Either way, refuse to guess which directory the user meant.
 			return nil, fmt.Errorf(
 				"local_directory: project has multiple local_directory resources for this daemon (%q and %q); remove the extra in project settings",
-				match.AbsPath,
+				current.AbsPath,
 				strings.TrimSpace(ref.LocalPath),
 			)
 		}
@@ -103,13 +135,27 @@ func findLocalDirectoryAssignment(resources []ProjectResourceData, daemonID stri
 		if err != nil {
 			return nil, err
 		}
-		match = &localDirectoryAssignment{
-			Ref:      ref,
-			AbsPath:  absPath,
-			RealPath: realPath,
+		repositoryURL := primaryRepositoryURL
+		if legacy {
+			repositoryURL = ""
+		}
+		assignment := &localDirectoryAssignment{
+			Ref:               ref,
+			RepositoryURL:     repositoryURL,
+			RepositoryPrimary: !legacy,
+			AbsPath:           absPath,
+			RealPath:          realPath,
+		}
+		if legacy {
+			legacyMatch = assignment
+		} else {
+			match = assignment
 		}
 	}
-	return match, nil
+	if match != nil {
+		return match, nil
+	}
+	return legacyMatch, nil
 }
 
 // normalizeLocalPath strips whitespace and resolves the path to an absolute
@@ -349,6 +395,59 @@ func isGitWorkTree(ctx context.Context, path string) bool {
 		return false
 	}
 	return strings.TrimSpace(string(out)) == "true"
+}
+
+func validateLocalGitRepository(ctx context.Context, assignment *localDirectoryAssignment) error {
+	if assignment == nil || strings.TrimSpace(assignment.RepositoryURL) == "" {
+		return nil
+	}
+	rootCmd := exec.CommandContext(ctx, "git", "-C", assignment.AbsPath, "rev-parse", "--show-toplevel")
+	rootOut, err := rootCmd.Output()
+	if err != nil {
+		return fmt.Errorf("local_directory: path is not a Git working tree: %q", assignment.AbsPath)
+	}
+	root := filepath.Clean(strings.TrimSpace(string(rootOut)))
+	if root != filepath.Clean(assignment.RealPath) && root != filepath.Clean(assignment.AbsPath) {
+		return fmt.Errorf("local_directory: select the Git repository root %q instead of %q", root, assignment.AbsPath)
+	}
+	originCmd := exec.CommandContext(ctx, "git", "-C", assignment.AbsPath, "remote", "get-url", "origin")
+	originOut, err := originCmd.Output()
+	if err != nil || strings.TrimSpace(string(originOut)) == "" {
+		return fmt.Errorf("local_directory: Git repository has no origin remote: %q", assignment.AbsPath)
+	}
+	origin := strings.TrimSpace(string(originOut))
+	if canonicalGitRemote(origin) != canonicalGitRemote(assignment.RepositoryURL) {
+		return fmt.Errorf("local_directory: origin %q does not match project repository %q", origin, assignment.RepositoryURL)
+	}
+	return nil
+}
+
+func canonicalGitRemote(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	if !strings.Contains(value, "://") {
+		if colon := strings.Index(value, ":"); colon > 0 {
+			hostPart := value[:colon]
+			if at := strings.LastIndex(hostPart, "@"); at >= 0 {
+				hostPart = hostPart[at+1:]
+			}
+			return normalizeGitRemoteParts(hostPart, value[colon+1:])
+		}
+	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Hostname() == "" {
+		return strings.TrimSuffix(strings.TrimSuffix(value, "/"), ".git")
+	}
+	return normalizeGitRemoteParts(parsed.Hostname(), parsed.Path)
+}
+
+func normalizeGitRemoteParts(host, path string) string {
+	host = strings.ToLower(strings.TrimSpace(host))
+	path = strings.Trim(strings.TrimSpace(path), "/")
+	path = strings.TrimSuffix(path, ".git")
+	return host + "/" + strings.ToLower(path)
 }
 
 // LocalPathLocker serialises agent tasks that share the same on-disk path.
