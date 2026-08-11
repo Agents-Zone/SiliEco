@@ -1,8 +1,9 @@
 # Silieco
 
-**Human + Agent Work OS**
+**SOP Execution Platform for Human and Agent Teams**
 
-Share your Agents and let them represent you inside a working organization.
+Coordinate people and AI Agents through reusable SOPs, with leaders managing
+work from objective to acceptance.
 
 [![CI](https://github.com/auenger/SiliEco/actions/workflows/ci.yml/badge.svg)](https://github.com/auenger/SiliEco/actions/workflows/ci.yml)
 
@@ -14,10 +15,22 @@ Share your Agents and let them represent you inside a working organization.
 
 ## What Silieco is
 
-Silieco is a collaborative operating system for work performed by people and AI
-Agents together. A team can describe an objective, turn it into Tasks, assign
-those Tasks to a person, an Agent, or a Swarm, and keep execution, discussion,
-decisions, reviews, and results in one shared record.
+Silieco is an SOP execution platform. It coordinates people and AI Agents as
+they carry out work through reusable standard operating procedures (SOPs).
+
+The platform has three operating roles:
+
+- **SOP Designers** define and improve reusable SOPs, including their stages,
+  inputs, outputs, required Skills, and review gates.
+- **SOP Executors**—people, AI Agents, and Swarms—complete assigned Tasks,
+  produce outputs, update progress, and surface blockers.
+- **Leaders** set business objectives and priorities, review progress, blockers,
+  key decisions, and results, and manage the full record from objective to
+  acceptance.
+
+A team can describe an objective, turn it into Tasks, assign those Tasks to a
+person, an Agent, or a Swarm, and keep execution, discussion, decisions,
+reviews, and results in one shared record.
 
 The product supports both lightweight work and governed processes:
 
