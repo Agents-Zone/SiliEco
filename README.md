@@ -32,6 +32,23 @@ A team can describe an objective, turn it into Tasks, assign those Tasks to a
 person, an Agent, or a Swarm, and keep execution, discussion, decisions,
 reviews, and results in one shared record.
 
+## Demonstration TODO
+
+- Start from the audience's view of one SOP in execution: its objective,
+  current Stage, Tasks, inputs, outputs, progress, and blockers.
+- Show what each role does. SOP Executors complete work and report progress;
+  leaders review progress, blockers, decisions, and acceptance.
+- Move from execution to design: show how an SOP Designer uses run records to
+  improve the SOP's Stages, Tasks, inputs, review gates, and Agent duties.
+- Create two benchmark SOPs:
+  - **Payment exception investigation and merchant response**: improve
+    operating quality from an exception through investigation, bank follow-up,
+    merchant response, closure, and review.
+  - **New payment service MVP validation**: move from an opportunity through
+    target-customer and use-case definition, prototype or integration
+    preparation, testing, MVP validation, and a continue, revise, or stop
+    decision.
+
 The product supports both lightweight work and governed processes:
 
 - create a Task directly in a Space and use the normal linear lifecycle; or
