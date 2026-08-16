@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import { config } from "dotenv";
 import { resolve } from "path";
 import {
+  resolveAllowedDevOrigins,
   resolveDevDocsUrl,
   resolveDevRemoteApiUrl,
   resolveDocsUrl,
@@ -26,17 +27,7 @@ const docsUrl = isDev
 
 // Parse hostnames from CORS_ALLOWED_ORIGINS so that Next.js dev server
 // allows cross-origin HMR / webpack requests (e.g. from Tailscale IPs).
-const allowedDevOrigins = process.env.CORS_ALLOWED_ORIGINS
-  ? process.env.CORS_ALLOWED_ORIGINS.split(",")
-      .map((origin) => {
-        try {
-          return new URL(origin.trim()).hostname;
-        } catch {
-          return origin.trim();
-        }
-      })
-      .filter(Boolean)
-  : undefined;
+const allowedDevOrigins = resolveAllowedDevOrigins(process.env);
 
 const nextConfig: NextConfig = {
   ...(process.env.STANDALONE === "true" ? { output: "standalone" as const } : {}),

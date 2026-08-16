@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  resolveAllowedDevOrigins,
   resolveBrowserApiBaseUrl,
   resolveBrowserWsUrl,
   resolveDevDocsUrl,
@@ -208,5 +209,30 @@ describe("dev-only fallbacks", () => {
 
   it("falls back to the local docs port", () => {
     expect(resolveDevDocsUrl({})).toBe("http://localhost:4000");
+  });
+});
+
+describe("resolveAllowedDevOrigins", () => {
+  it("drops the port so entries match the origin hostname Next compares", () => {
+    expect(
+      resolveAllowedDevOrigins({
+        CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://100.64.0.1:3000",
+      }),
+    ).toEqual(["localhost", "100.64.0.1"]);
+  });
+
+  it("keeps bare hostnames that are not parseable URLs", () => {
+    expect(
+      resolveAllowedDevOrigins({ CORS_ALLOWED_ORIGINS: "app.example.com" }),
+    ).toEqual(["app.example.com"]);
+  });
+
+  it("ignores blank entries and returns undefined when nothing remains", () => {
+    expect(
+      resolveAllowedDevOrigins({ CORS_ALLOWED_ORIGINS: "http://a.test, ,," }),
+    ).toEqual(["a.test"]);
+    expect(resolveAllowedDevOrigins({ CORS_ALLOWED_ORIGINS: " , " })).toBeUndefined();
+    expect(resolveAllowedDevOrigins({ CORS_ALLOWED_ORIGINS: "" })).toBeUndefined();
+    expect(resolveAllowedDevOrigins({})).toBeUndefined();
   });
 });

@@ -52,6 +52,32 @@ export function resolveDevDocsUrl(env: RuntimeEnv): string {
   return resolveDocsUrl(env) ?? "http://localhost:4000";
 }
 
+// Next.js matches `allowedDevOrigins` against the request origin's hostname,
+// which never carries a port. Entries must therefore be bare hostnames — a
+// `host` value like `100.93.224.87:3000` silently never matches and Next keeps
+// blocking `/_next/*` dev resources for that origin.
+export function resolveAllowedDevOrigins(
+  env: RuntimeEnv,
+): string[] | undefined {
+  const raw = env.CORS_ALLOWED_ORIGINS?.trim();
+  if (!raw) return undefined;
+
+  const hosts = raw
+    .split(",")
+    .map((origin) => {
+      const value = origin.trim();
+      if (!value) return "";
+      try {
+        return new URL(value).hostname;
+      } catch {
+        return value;
+      }
+    })
+    .filter(Boolean);
+
+  return hosts.length > 0 ? hosts : undefined;
+}
+
 export function resolveBrowserApiBaseUrl(env: RuntimeEnv): string | undefined {
   return cleanUrl(env.NEXT_PUBLIC_API_URL);
 }
